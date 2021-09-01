@@ -4,7 +4,7 @@ import torch
 import spacy
 import numpy as np
 from tqdm import tqdm
-import re
+import pandas as pd
 
 def get_batches(from_iter, group_size):
     ret = []
@@ -67,18 +67,19 @@ class LMBert():
             self._lemmas_cache[word] = lemma
             return lemma
 
-    def predict_sent_substitute_representatives(self, data_subset, settings, max_pred=50):
-
+    def predict_sent_substitute_representatives(self, data_subset, settings,):
+        # TODO: why .5
         patterns = [('{pre} {target_predict} {post}', 0.5)]
         n_patterns = len(patterns)
         pattern_str, pattern_w = list(zip(*patterns))
         pattern_w = torch.from_numpy(np.array(pattern_w, dtype=np.float32).reshape(-1, 1)).to(device=self.device)
-        
+        num_predictions = 30522
+
         with torch.no_grad():
             
             sorted_by_len = data_subset.sort_values(by="length")[['word_index', 'formatted_sentence']]
-            reps = {}
-            predictions = {}
+            inst_ids = []
+            predictions = []
 
             for batch in get_batches(sorted_by_len.iterrows(),
                                      self.max_batch_size // n_patterns):
@@ -134,53 +135,25 @@ class LMBert():
                 self.bert.bert.embeddings.word_embeddings.weight.transpose(0, 1))
 
                 # Get top terms for each sentence
-                topk_vals, topk_idxs = torch.topk(pre_softmax, settings.prediction_cutoff, -1)
+                topk_vals, topk_idxs = torch.topk(pre_softmax, num_predictions, -1)
 
                 # Apply softmax to logits
                 probs_batch = torch.softmax(topk_vals, -1).detach().cpu().numpy()
                 topk_idxs_batch = topk_idxs.detach().cpu().numpy()
 
-                # Lemmatized vocab is enabled by default
-                # That means we use BERT's 30522 vocab
-                target_vocab = self.original_vocab if settings.disable_lemmatization else self.lemmatized_vocab
+                for (inst_id, _), probs, topk_idxs in zip(batch, probs_batch, topk_idxs_batch):
+                    inst_ids.append(inst_id)
+                    predictions.append({idx : prob for idx, prob in zip(topk_idxs, probs)})
 
-                for (inst_id, (pre, target, post)), probs, topk_idxs in zip(batch, probs_batch, topk_idxs_batch):
-                    lemma = target.lower() if settings.disable_lemmatization else self._get_lemma(target.lower())
+        predictions = pd.DataFrame(data=predictions, index=inst_ids)
 
-                    # Removes the original term from prediction by making its prob. 0
-                    # Also remove random characters cause they're trash
-                    predicted_words = []
-                    predicted_probs = []
-                    num_pred = 0
-                    for i in range(settings.prediction_cutoff):
-                        predicted_word = target_vocab[topk_idxs[i]]
+        ## Reorder and rename columns
+        predictions = predictions[range(num_predictions)]
+        predictions.columns = self.original_vocab 
+        
+        # Lemmatized vocab is enabled by default
+        # That means we use BERT's 30522 vocab
+        #target_vocab = self.original_vocab if settings.disable_lemmatization else self.lemmatized_vocab
 
-                        if predicted_word == lemma or len(predicted_word) <= 2 or \
-                           re.sub(r'[^a-z]', '', predicted_word) == '' :
-                           continue
-                        else: 
-                            predicted_words.append(predicted_word)
-                            predicted_probs.append(probs[i])
-                            num_pred += 1
 
-                        if num_pred == max_pred:
-                            break
-
-                    # Adjust probs to account for zeroed out vals
-                    predicted_probs /= np.sum(predicted_probs)
-
-                    predictions[inst_id] = {word : prob for word, prob in zip(predicted_words, predicted_probs)}
-
-                    new_samples = list(np.random.choice(predicted_words, settings.n_represents * settings.n_samples_per_rep,
-                                            p=predicted_probs))
-
-                    new_reps = []
-                    for i in range(settings.n_represents):
-                        new_rep = {}
-                        for j in range(settings.n_samples_per_rep):
-                            new_sample = new_samples.pop()
-                            new_rep[new_sample] = new_rep.get(new_sample, 0) + 1
-                        new_reps.append(new_rep)
-                    reps[inst_id] = new_reps
-
-        return reps, predictions
+        return predictions

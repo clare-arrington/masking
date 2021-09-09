@@ -16,6 +16,30 @@ def get_batches(from_iter, group_size):
     if ret:
         yield ret
 
+def apply_softmax(values):
+    e_x = np.exp(values - np.max(values))
+    return e_x / e_x.sum()
+
+def get_substitutes(predictions, settings):
+    reps = {}
+    words = list(predictions.columns)
+
+    for inst_id, probs in predictions.iterrows():
+        probs = apply_softmax(list(probs.values))
+        new_samples = list(np.random.choice(words, settings.n_represents * settings.n_samples_per_rep,
+                                            p=probs))
+
+        new_reps = []
+        for _ in range(settings.n_represents):
+            new_rep = {}
+            for _ in range(settings.n_samples_per_rep):
+                new_sample = new_samples.pop()
+                new_rep[new_sample] = new_rep.get(new_sample, 0) + 1
+            new_reps.append(new_rep)
+        reps[inst_id] = new_reps
+
+    return reps
+
 class LMBert():
     def __init__(self, cuda_device, bert_model, max_batch_size=20):
         device = torch.device(f'cuda:{cuda_device}') if cuda_device >= 0 else torch.device('cpu')
@@ -129,7 +153,6 @@ class LMBert():
                             logits_target_tokens[i:i + n_patterns, :] * pattern_w).sum(0)
 
                 # Softmax is applied to the vocab to get the probs 
-                # Needed to structrue appropriately
                 pre_softmax = torch.matmul(
                 logits_target_tokens_joint_patt,
                 self.bert.bert.embeddings.word_embeddings.weight.transpose(0, 1))
@@ -141,6 +164,10 @@ class LMBert():
                 probs_batch = torch.softmax(topk_vals, -1).detach().cpu().numpy()
                 topk_idxs_batch = topk_idxs.detach().cpu().numpy()
 
+                # Lemmatized vocab is enabled by default
+                # That means we use BERT's 30522 vocab
+                #target_vocab = self.original_vocab if settings.disable_lemmatization else self.lemmatized_vocab
+
                 for (inst_id, _), probs, topk_idxs in zip(batch, probs_batch, topk_idxs_batch):
                     inst_ids.append(inst_id)
                     predictions.append({idx : prob for idx, prob in zip(topk_idxs, probs)})
@@ -150,10 +177,5 @@ class LMBert():
         ## Reorder and rename columns
         predictions = predictions[range(num_predictions)]
         predictions.columns = self.original_vocab 
-        
-        # Lemmatized vocab is enabled by default
-        # That means we use BERT's 30522 vocab
-        #target_vocab = self.original_vocab if settings.disable_lemmatization else self.lemmatized_vocab
-
 
         return predictions

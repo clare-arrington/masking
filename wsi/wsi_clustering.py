@@ -1,17 +1,16 @@
 from collections import Counter, defaultdict
-from typing import Dict
-import numpy as np
 from scipy.spatial.distance import pdist, cdist
 from scipy.cluster.hierarchy import linkage, fcluster
 
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.cluster import AffinityPropagation
+import numpy as np
 
-## Goes through sense cluster data to remap and get best fitting sentences
 def remap_senses(sense_remapping, clusters):
     remapped_clusters = defaultdict(list)
     for sense_num, cluster in clusters.items():
-        remapped_sense = sense_remapping[sense_num]
+        remapped_sense = sense_remapping[sense_num] ## TODO: sometimes this breaks with a key error; why?
         remapped_clusters[remapped_sense].extend(cluster)
 
     clusters = {}
@@ -20,56 +19,70 @@ def remap_senses(sense_remapping, clusters):
 
     return clusters
 
-def perform_clustering(predictions, settings):
-    metric = 'cosine'
-    method = 'average'
-    dists = pdist(predictions, metric=metric)
-    Z = linkage(dists, method=method, metric=metric)
+def perform_clustering(predictions, cluster_method, settings):
+    if cluster_method == 'affinity_propagation':
+        ## If AP doesn't converge, try it again and up the 
+        cluster_centers = []
+        iters = 0
+        while len(cluster_centers) == 0   :
+            iters += 1000 
+            ## TODO: may have to adjust preference, but leaving alone for now
+            af = AffinityPropagation(damping=.9,  max_iter=iters, random_state=None, verbose=True).fit(predictions)
+            cluster_centers = af.cluster_centers_ # TODO: could be indices?
+            
+        labels = af.labels_
+        return labels, cluster_centers
 
-    distance_crit = Z[-settings.max_number_senses, 2]
+    else:
+        dists = pdist(predictions, metric='cosine')
+        Z = linkage(dists, method='average', metric='cosine')
 
-    labels = fcluster(Z, distance_crit,
-                      'distance') - 1
+        distance_crit = Z[-settings.max_number_senses, 2]
 
-    return labels
+        labels = fcluster(Z, distance_crit, 'distance') - 1
 
-def cluster_predictions(predictions, settings):
-    labels = perform_clustering(predictions, settings)
+        return labels, None
+
+def cluster_predictions(predictions, cluster_method, settings):
+    labels, cluster_centers = perform_clustering(predictions, cluster_method, settings)
 
     ## Count cluster sizes by instances
-    initial_clusters = defaultdict(list)  
+    sense_clusters = defaultdict(list)  
     for inst_id, label in zip(predictions.index, labels):
-        initial_clusters[label].append(inst_id)
+        sense_clusters[label].append(inst_id)
 
-    big_senses = [label for label, sents in initial_clusters.items() if len(sents) >= settings.min_sense_instances]
+    ## Only check 15 biggest
+    big_senses = [label for label, count in Counter(labels).most_common(10) if count >= settings.min_sense_instances]
+    n_senses = np.max(labels) + 1
 
-    ## Remap senses
-    if settings.min_sense_instances > 0:
-        sense_remapping = {}
-
-        ## Find means of sense clusters
-        n_senses = np.max(labels) + 1
-        sense_means = np.zeros((n_senses, predictions.shape[1]))
-        for sense_num, ids in initial_clusters.items():
+    ## Find means of sense clusters
+    if cluster_centers is None:
+        cluster_centers = np.zeros((n_senses, predictions.shape[1]))
+        for sense_num, ids in sense_clusters.items():
             cluster_vectors = predictions.loc[ids]
+            ## TODO: currently mean not median
             cluster_center = np.mean(np.array(cluster_vectors), 0)
-            sense_means[sense_num] = cluster_center
-
-        dists = cdist(sense_means, sense_means, metric='cosine')
+            cluster_centers[sense_num] = cluster_center
+    
+    ## Remap senses if they aren't all big
+    if len(big_senses) != n_senses:
+        dists = cdist(cluster_centers, cluster_centers, metric='cosine')
         closest_senses = np.argsort(dists, )[:, ]
 
         ## Determine closest sense and set remapping if not big
+        sense_remapping = {}
         for sense_idx in range(n_senses):
             for closest_sense in closest_senses[sense_idx]:
                 if closest_sense in big_senses:
                     sense_remapping[sense_idx] = closest_sense
                     break
 
-        sense_clusters = remap_senses(sense_remapping, initial_clusters)
+        sense_clusters = remap_senses(sense_remapping, sense_clusters)
         
-    return sense_clusters
+    return sense_clusters, cluster_centers
 
-def cluster_representatives(representatives, settings):
+## TODO: didn't edit for AP, assuming I'll remove anyway?
+def cluster_representatives(representatives, cluster_method, settings):
     ## Reformat for clustering
     ids_ordered = list(representatives.keys())
     all_reps = [y for x in ids_ordered for y in representatives[x]]
@@ -79,7 +92,7 @@ def cluster_representatives(representatives, settings):
     rep_mat = dict_vectorizer.fit_transform(all_reps)
     rep_vectors = TfidfTransformer(norm=None).fit_transform(rep_mat).todense()
 
-    labels = perform_clustering(rep_vectors, settings)
+    labels, _ = perform_clustering(rep_vectors, cluster_method, settings)
 
     ## Count cluster sizes by instances
     initial_clusters = defaultdict(list)  
@@ -115,6 +128,7 @@ def cluster_representatives(representatives, settings):
                     sense_remapping[sense_idx] = closest_sense
                     break
 
+        print(n_senses, initial_clusters.keys(), sense_remapping)
         sense_clusters = remap_senses(sense_remapping, initial_clusters)
         
     return sense_clusters

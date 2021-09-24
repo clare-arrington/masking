@@ -5,6 +5,7 @@ import spacy
 import numpy as np
 from tqdm import tqdm
 import pandas as pd
+import re
 
 def get_batches(from_iter, group_size):
     ret = []
@@ -20,14 +21,34 @@ def apply_softmax(values):
     e_x = np.exp(values - np.max(values))
     return e_x / e_x.sum()
 
-def get_substitutes(predictions, settings):
+def get_substitutes(likelihoods, target, settings):
     reps = {}
-    words = list(predictions.columns)
 
-    for inst_id, probs in predictions.iterrows():
-        probs = apply_softmax(list(probs.values))
-        new_samples = list(np.random.choice(words, settings.n_represents * settings.n_samples_per_rep,
-                                            p=probs))
+    for inst_id, probs in likelihoods.iterrows():
+        predicted_words = []
+        predicted_probs = []
+        num_pred = 0
+
+        for predicted_word, prob in probs.nlargest(100).iteritems():
+            if predicted_word == target or len(predicted_word) <= 2 or \
+                re.sub(r'[^a-z]', '', predicted_word) == '' :
+                continue
+            else: 
+                predicted_words.append(predicted_word)
+                predicted_probs.append(prob)
+                num_pred += 1
+
+            if num_pred == settings.n_samples_per_rep:
+                break
+
+        # Adjust probs to account for zeroed out vals
+        predicted_probs /= np.sum(predicted_probs)
+
+        # predictions[inst_id] = {word : prob for word, prob in zip(predicted_words, predicted_probs)}
+        # probs = apply_softmax(list(probs.values))
+        new_samples = list(np.random.choice(predicted_words, 
+                                            settings.n_represents * settings.n_samples_per_rep,
+                                            p=predicted_probs))
 
         new_reps = []
         for _ in range(settings.n_represents):
@@ -39,6 +60,26 @@ def get_substitutes(predictions, settings):
         reps[inst_id] = new_reps
 
     return reps
+
+def trim_predictions(likelihoods, target, settings):
+    ## TODO: dumb lemma issue, should use numerical ids instead of words 
+    shared_words = set()
+
+    for inst_id, probs in likelihoods.iterrows():
+        num_pred = 0
+
+        for predicted_word, prob in probs.nlargest(100).iteritems():
+            if predicted_word == target or len(predicted_word) <= 2 or \
+                re.sub(r'[^a-z]', '', predicted_word) == '' :
+                continue
+            else: 
+                shared_words.add(predicted_word)
+                num_pred += 1
+
+            if num_pred == settings.n_samples_per_rep:
+                break
+
+    return likelihoods[shared_words]
 
 class LMBert():
     def __init__(self, cuda_device, bert_model, max_batch_size=20):
@@ -164,10 +205,6 @@ class LMBert():
                 probs_batch = torch.softmax(topk_vals, -1).detach().cpu().numpy()
                 topk_idxs_batch = topk_idxs.detach().cpu().numpy()
 
-                # Lemmatized vocab is enabled by default
-                # That means we use BERT's 30522 vocab
-                #target_vocab = self.original_vocab if settings.disable_lemmatization else self.lemmatized_vocab
-
                 for (inst_id, _), probs, topk_idxs in zip(batch, probs_batch, topk_idxs_batch):
                     inst_ids.append(inst_id)
                     predictions.append({idx : prob for idx, prob in zip(topk_idxs, probs)})
@@ -176,6 +213,9 @@ class LMBert():
 
         ## Reorder and rename columns
         predictions = predictions[range(num_predictions)]
-        predictions.columns = self.original_vocab 
+
+        # Lemmatized vocab is enabled by default
+        # That means we use BERT's 30522 vocab
+        predictions.columns = self.original_vocab if settings.disable_lemmatization else self.lemmatized_vocab
 
         return predictions

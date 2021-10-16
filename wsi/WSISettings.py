@@ -7,7 +7,7 @@ WSISettings = namedtuple('WSISettings', ['n_represents', 'n_samples_per_rep', 'c
                                          ])
 
 DEFAULT_PARAMS = WSISettings(
-    n_represents=15,
+    n_represents=15, ##TODO: where is this used?
     n_samples_per_rep=50,
 
     max_number_senses=15,

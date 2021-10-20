@@ -21,13 +21,22 @@ def get_us_uk_targets(path, get_us=False, get_uk=False):
     return targets
 
 #%%
-dataset_name = 'bnc'
-corpora_path = '/home/clare/Data/corpus_data/us_uk'
+main_path = '/home/clare/Data/corpus_data/us_uk'
 
-if dataset_name == 'bnc':
-    targets = get_us_uk_targets(f'{corpora_path}/truth', get_uk=True)
-elif dataset_name == 'coca':
-    targets = get_us_uk_targets(f'{corpora_path}/truth', get_us=True)
+corpus_targets = { 
+    'bnc': get_us_uk_targets(f'{main_path}/truth', get_uk=True),
+    'coca' : get_us_uk_targets(f'{main_path}/truth', get_us=True)
+}
 
-target_sents, non_target_sents = pull_target_data(targets, f'{corpora_path}/corpora/{dataset_name}.txt')
-save_data(target_sents, non_target_sents, f'{corpora_path}/subset/{dataset_name}')
+corpora_path = f'{main_path}/corpora'
+subset_path = f'{main_path}/subset'
+pattern=r'[a-z]+'
+
+#%%
+sentence_data, target_data = \
+    pull_target_data(corpus_targets, corpora_path, subset_path, pattern)
+
+#%%
+save_data(sentence_data, target_data, subset_path)
+
+print('All done!')

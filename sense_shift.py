@@ -5,7 +5,7 @@ sentence_path = '/home/clare/Data/corpus_data/semeval/subset/target_sentences.cs
 sentence_data = pd.read_csv(sentence_path)
 sentence_data.set_index('sent_id', inplace=True) 
 
-target_path = '/home/clare/Data/masking_results/semeval/all/target_sense_labels.csv'
+target_path = '/home/clare/Data/masking_results/semeval/all_1/target_sense_labels.csv'
 target_data = pd.read_csv(target_path)
 target_data.set_index('word_index', inplace=True) 
 
@@ -50,6 +50,8 @@ for label, targets in labels.items():
         rows = target_data[target_data.target == target]
         print(f'{len(rows)} target occurences')
 
+        sent_data = sentence_data.loc[rows.sent_id]
+
         for cluster in rows.cluster.unique():
             ids = rows[rows.cluster == cluster].sent_id
             sents = sentence_data.loc[ids]
@@ -59,11 +61,17 @@ for label, targets in labels.items():
             for corpus in corpora:
                 subset = sents[sents.corpus == corpus]
                 prop = len(subset) / len(sents)
-                print(f'\t{prop:.2f} of cluster from {corpus}')
+                print(f'{prop:.2f} of cluster from {corpus}')
 
             print()
             for corpus in corpora:
-                prop = len(subset) / corpus_length[corpus]
-                print(f'\t{prop:.3f} of targets in {corpus} in this cluster')
+                subset = sents[sents.corpus == corpus]
+                all_corpus = sent_data[sent_data.corpus == corpus]
+                prop = len(subset) / len(all_corpus)
+                print(f'{prop:.2f} of {corpus} in cluster')
+
+            # for corpus in corpora:
+            #     prop = len(subset) / corpus_length[corpus]
+            #     print(f'\t{prop:.3f} of targets in {corpus} in this cluster')
 
 # %%

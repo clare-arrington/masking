@@ -1,13 +1,14 @@
 #%%
-from wsi.lm_bert import LMBert, get_substitutes, trim_predictions
+from wsi.lm_bert import LMBert, trim_predictions
 from wsi.WSISettings import DEFAULT_PARAMS, WSISettings
-from wsi.wsi_clustering import cluster_predictions, cluster_representatives
+from wsi.wsi_clustering import cluster_predictions
 
+from typing import List
 from pathlib import Path
 import pandas as pd
-import pickle
+from datetime import datetime
+from dateutil import tz
 import time
-import glob
 
 def save_results(data, dataset_desc, sense_clusters, output_path):
     ## Reformat sentences
@@ -43,35 +44,43 @@ def save_results(data, dataset_desc, sense_clusters, output_path):
 
     return cluster_data
 
-def pull_rows(data, targets, load_sentence_path, loaded_sentences, subset_num):
+def pull_rows(data, targets, subset_num):
     target_rows = {}
     for target in targets:
-        if load_sentence_path != '':
-            data_subset = loaded_sentences[target]
-            data_subset = data[data['word_index'].isin(data_subset)]
+        # data[data.formatted_sentence.apply(lambda s: len(s[0]) == 0 or len(s[2]) == 0)]
+        # If the target is the only thing in the sent, we'll get nonsense. 
+        data_subset = data[(data.target.isin(target)) & (data.length >= 10)]
+        if subset_num:
+            num_rows = min(len(data_subset), subset_num)
+            data_subset = data_subset.sample(num_rows)
+        else: 
             num_rows = len(data_subset)
-        else:
-            # data[data.formatted_sentence.apply(lambda s: len(s[0]) == 0 or len(s[2]) == 0)]
-            # If the target is the only thing in the sent, we'll get nonsense
-            data_subset = data[(data.target == target) & (data.length >= 10)]
-            if subset_num:
-                num_rows = min(len(data_subset), subset_num)
-                data_subset = data_subset.sample(num_rows)
-            else: 
-                num_rows = len(data_subset)
 
-        target_rows[target] = (data_subset, num_rows)
+        target_rows[target[0]] = (data_subset, num_rows)
 
     return target_rows
 
+def pull_predictions():
+    NotImplemented
+
+def convert_to_local(t):
+    from_zone = tz.tzutc()
+    to_zone = tz.tzlocal()
+
+    t = datetime.utcfromtimestamp(t)
+    t = t.replace(tzinfo=from_zone)
+    t = t.astimezone(to_zone)
+
+    return datetime.strftime(t, '%H:%M')
+
 #%%
 def main(
-        data, dataset_desc, 
-        output_path, logging_file, targets, 
-        cluster_method='hierarchical',
-        use_representatives=False, 
+        data: pd.DataFrame, 
+        dataset_desc: str, 
+        output_path: str, logging_file: str, 
+        targets: List[str],
         subset_num=None, 
-        load_sentence_path=''
+        save_preds=True
         ):
 
     ## Pull settings from file
@@ -81,37 +90,22 @@ def main(
     ## Load base BERT model
     lm = LMBert(settings.cuda_device, settings.bert_model, settings.max_batch_size)
 
-    ## Only paths that needs to be made
+    ## Only paths that need to be made
     Path(f'{output_path}/summaries').mkdir(parents=True, exist_ok=True)
+    Path(f'{output_path}/predictions').mkdir(parents=True, exist_ok=True)
 
     ## Start the new logging file for this run
     with open(logging_file, 'w') as flog:
         print(dataset_desc, file=flog)
         print(f'\n{len(data)} rows loaded', file=flog)
         print(f'{len(targets)} targets loaded\n', file=flog)
-        if load_sentence_path != '':
-            print(f'Loading same sentence ids as {load_sentence_path}', file=flog)
 
-    ## TODO: merge with pull data func
-    loaded_sentences = {}
-    if load_sentence_path != '':
-        for row in glob.glob(f'{load_sentence_path}/*.dat'):
-            target, _ = row[len(load_sentence_path)+1:].split('_')
-            
-            if target in targets:
-                subset_ids = []
-                with open(row, 'rb') as fin:
-                    clusters = pickle.load(fin)
-                    for id, cluster in clusters.items():
-                        subset_ids.extend(cluster)
-
-                loaded_sentences[target] = subset_ids
-
-    target_rows = pull_rows(data, targets, load_sentence_path, loaded_sentences, subset_num)
+    target_rows = pull_rows(data, targets, subset_num)
     sense_data = []
 
-    for n, target in enumerate(sorted(targets)):
+    for n, target_alts in enumerate(sorted(targets)):
         # break
+        target = target_alts[0]
         print(f'\n{n} / {len(targets)} : {target}')
 
         data_subset, num_rows = target_rows[target]
@@ -121,31 +115,28 @@ def main(
             print(f'{target.capitalize()} : {num_rows} rows', file=flog)
 
             if num_rows >= 100:
-                print(f'\tPredicting representatives for {num_rows} rows...')
+                print(f'\tPredicting for {num_rows} rows...')
                 start = time.time()
+                print(f'\tStart time: {convert_to_local(start)}')
                 predictions = lm.predict_sent_substitute_representatives(data_subset, settings)
                 end = time.time()
-                print(f'\tPredicting took {end - start:.2f} seconds', file=flog)
+                print(f'\t  Predicting took {end - start:.2f} seconds', file=flog)
+                print(f'\t  End time: {convert_to_local(end)}')
+                
+                if save_preds: 
+                    predictions.to_csv(f'{output_path}/predictions/{target}.csv')
+                    print(f'\tPredictions saved')
 
-                if use_representatives:
-                    reps = get_substitutes(predictions, target, settings)
-                    print('\tClustering substitutes...')
-                    start = time.time()
-                    sense_clusters, cluster_centers = cluster_representatives(reps, cluster_method, settings)
-                    end = time.time()
-                else:
-                    print('\tClustering likelihoods...')
-                    start = time.time()
-                    predictions = trim_predictions(predictions, target, settings)
-                    sense_clusters, cluster_centers = cluster_predictions(predictions, cluster_method, settings)
-                    end = time.time()
+                print('\n\tClustering likelihoods...')
+                start = time.time()
+                print(f'\t  Start time: {convert_to_local(start)}')
+                predictions = trim_predictions(predictions, target_alts, settings)
+                sense_clusters, cluster_centers = cluster_predictions(predictions, settings)
+                end = time.time()
 
+                print(f'\t  End time: {convert_to_local(end)}')
                 print(f'\tClustering took {end - start:.2f} seconds', file=flog)
 
-                # print(f'{len(sense_clusters)} clusters')
-
-                # print('\tGetting cluster stats...',)
-                # stats = get_stats(clusters, max_iter=2500)
             else:
                 ## We don't want to run WSI on a target that is too small
                 ## Mainly it causes problems for the clustering phase 
@@ -164,25 +155,6 @@ def main(
 
     sense_data = pd.concat(sense_data)
     sense_data.to_csv(f'{output_path}/target_sense_labels.csv', index=False)
-
-#%%    
-def write_stats(stats, data_subset, best_sentences, senses, fout):
-    for label, info in stats.items():
-
-        print(f'\n=================== Sense {label} ===================', file=fout)
-
-        print(f'{len(senses[label])} sentences\n', file=fout)
-        print(f'{info[0]} representatives\n', file=fout)
-
-        print('Best Words', file=fout)
-        #print(f'\t{", ".join(info[1])}', file=fout)
-        print(f'\t{", ".join(info[2])}\n', file=fout)
-
-        print('Best Sentences', file=fout)
-        indices = [t[0] for t in best_sentences[label]]
-        data_rows = data_subset[data_subset.word_index.isin(indices)]
-        for sentence in data_rows.sentence:
-            print(f'\t{sentence}\n', file=fout)
 
 # %%
 def create_sense_sentences(sentence_data, output_path):

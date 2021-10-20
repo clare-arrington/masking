@@ -16,7 +16,7 @@ else:
     dataset_desc = 'SemEval 2020 Task \nCCOHA 1 and 2'
 
 sentence_data = pd.read_csv(sentence_path)
-if corpus_name:
+if corpus_name is not None:
     sentence_data = sentence_data[sentence_data.corpus == corpus_name]
 ids = list(sentence_data.sent_id)
 print(f'{len(ids)} sentences pulled')

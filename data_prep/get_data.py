@@ -24,8 +24,6 @@ def trim_post(post, cutoff=100):
 
     return new_post
 
-# line = 'she keep her head_nn tip_vb down so that her long dark blond hair fall over her face_nn to hide the fact that part_nn of her low jaw be miss'
-
 def parse_sentences(
     corpus_path, non_target_path, corpus_name, 
     targets, word_indices, sent_id_shift, pattern):
@@ -94,20 +92,22 @@ def parse_sentences(
     return sentence_data, target_data, word_indices, sent_id
 
 #%%
-def pull_target_data(targets, data_path, non_target_path, corpus_names, pattern=r'[a-z]+'): 
+def pull_target_data(corpus_targets, data_path, subset_path, pattern=r'[a-z]+'): 
     ## Setup 
-    word_indices = {word:0 for word in targets}
+    all_targets = [target for targets in corpus_targets.values() for target in targets]
+    word_indices = {word:0 for word in set(all_targets)}
     sent_id_shift = 0
     sentence_data = []
     target_data = []
 
     pattern = re.compile(pattern)
 
-    Path(non_target_path).parent.mkdir(parents=True, exist_ok=True)
+    print(f'Results will be saved to {subset_path}')
+    Path(subset_path).mkdir(parents=True, exist_ok=True)
 
-    for corpus_name in corpus_names:
+    for corpus_name, targets in corpus_targets.items():
         s_data, t_data, word_indices, sent_id_shift = \
-            parse_sentences(data_path, non_target_path, corpus_name,
+            parse_sentences(data_path, subset_path, corpus_name,
             targets, word_indices, sent_id_shift, pattern)
         
         sentence_data.extend(s_data)

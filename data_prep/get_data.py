@@ -1,10 +1,10 @@
 #%%
-from os import cpu_count
-import pickle
-import pandas as pd
 from pathlib import Path
-import re
 from tqdm import tqdm
+import pandas as pd
+import spacy 
+import pickle
+import re
 
 def trim_pre(pre, cutoff=100):
     new_pre = ''
@@ -24,8 +24,19 @@ def trim_post(post, cutoff=100):
 
     return new_post
 
+## TODO: add this
+def lemmatize():
+    nlp = spacy.load("en_core_web_sm")
+
+    docs = ["We've been running all day.", "Let's be better."]
+
+    for doc in nlp.pipe(docs, batch_size=32, n_process=3, disable=["parser", "ner"]):
+        print([tok.lemma_ for tok in doc])
+
+
+
 def parse_sentences(
-    corpus_path, non_target_path, corpus_name, 
+    corpora_path, non_target_path, corpus_name, 
     targets, word_indices, sent_id_shift, pattern):
 
     non_target_sents = []
@@ -34,52 +45,57 @@ def parse_sentences(
     sent_id = sent_id_shift
 
     print(f'Parsing sentences for {corpus_name.upper()}')
-    with open(f'{corpus_path}/{corpus_name}.txt') as fin:
-        for line in tqdm(fin.readlines()):
+    with open(f'{corpora_path}/{corpus_name}.txt') as fin:
+        lines = [line.lower().strip() for line in fin.readlines()]
+        print(f'\t{len(lines)} sentences pulled')
+        lines = list(set(lines))
+        print(f'\t{len(lines)} sentences left after duplicates removed')
 
-            line = line.lower().strip()
-            words = re.findall(pattern, line)
-            found_targets = set(targets).intersection(set(words))
+    for line in tqdm(lines):
 
-            fully_cleaned_words = []
-            for word in words:
-                if word in targets:
-                    word = word.split('_')[0]
-                fully_cleaned_words.append(word)
+        line = line.lower().strip()
+        words = re.findall(pattern, line)
+        found_targets = set(targets).intersection(set(words))
 
-            if found_targets == set():
-                non_target_sents.append(line.lower())
+        fully_cleaned_words = []
+        for word in words:
+            if word in targets:
+                word = word.split('_')[0]
+            fully_cleaned_words.append(word)
+
+        if found_targets == set():
+            non_target_sents.append(line.lower())
+            continue
+        
+        word_index_sent = []
+        for i, word in enumerate(words):
+            if word not in found_targets:
+                word_index_sent.append(word)
                 continue
-            
-            word_index_sent = []
-            for i, word in enumerate(words):
-                if word not in found_targets:
-                    word_index_sent.append(word)
-                    continue
 
-                index = word_indices[word]
-                word_indices[word] += 1
+            index = word_indices[word]
+            word_indices[word] += 1
 
-                just_target, *etc = word.split('_')
-                word_index = f'{just_target}.{index}'
+            just_target, *etc = word.split('_')
+            word_index = f'{just_target}.{index}'
 
-                pre = ' '.join(fully_cleaned_words[:i])
-                post = ' '.join(fully_cleaned_words[i + 1:])
+            pre = ' '.join(fully_cleaned_words[:i])
+            post = ' '.join(fully_cleaned_words[i + 1:])
 
-                pre = trim_pre(pre)
-                post = trim_post(post)
+            pre = trim_pre(pre)
+            post = trim_post(post)
 
-                formatted_sent = (pre, just_target, post)
-                length = len(pre) + len(post)
+            formatted_sent = (pre, just_target, post)
+            length = len(pre) + len(post)
 
-                target_info = [word_index, just_target, formatted_sent, length, sent_id]
-                target_data.append(target_info)
+            target_info = [word_index, just_target, formatted_sent, length, sent_id]
+            target_data.append(target_info)
 
-                word_index_sent.append(word_index)
+            word_index_sent.append(word_index)
 
-            sentence_info = [sent_id, corpus_name, line, word_index_sent]
-            sentence_data.append(sentence_info)
-            sent_id += 1
+        sentence_info = [sent_id, corpus_name, line, word_index_sent]
+        sentence_data.append(sentence_info)
+        sent_id += 1
 
     print(f'\nTarget Sents: {len(sentence_data)}')
     print(f'Non-Target Sents: {len(non_target_sents)}')
@@ -92,7 +108,7 @@ def parse_sentences(
     return sentence_data, target_data, word_indices, sent_id
 
 #%%
-def pull_target_data(corpus_targets, data_path, subset_path, pattern=r'[a-z]+'): 
+def pull_target_data(corpus_targets, corpora_path, subset_path, pattern=r'[a-z]+'): 
     ## Setup 
     all_targets = [target for targets in corpus_targets.values() for target in targets]
     word_indices = {word:0 for word in set(all_targets)}
@@ -107,7 +123,7 @@ def pull_target_data(corpus_targets, data_path, subset_path, pattern=r'[a-z]+'):
 
     for corpus_name, targets in corpus_targets.items():
         s_data, t_data, word_indices, sent_id_shift = \
-            parse_sentences(data_path, subset_path, corpus_name,
+            parse_sentences(corpora_path, subset_path, corpus_name,
             targets, word_indices, sent_id_shift, pattern)
         
         sentence_data.extend(s_data)

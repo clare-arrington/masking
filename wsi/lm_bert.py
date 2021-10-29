@@ -1,10 +1,11 @@
-import multiprocessing
 from transformers import BertForMaskedLM, BertTokenizer
+from nltk.corpus import stopwords
+from tqdm import tqdm
+import multiprocessing
+import numpy as np
+import pandas as pd
 import torch
 import spacy
-import numpy as np
-from tqdm import tqdm
-import pandas as pd
 import re
 
 def get_batches(from_iter, group_size):
@@ -21,24 +22,21 @@ def apply_softmax(values):
     e_x = np.exp(values - np.max(values))
     return e_x / e_x.sum()
 
-def trim_predictions(likelihoods, target, settings):
-    ## TODO: dumb lemma issue, should use numerical ids instead of words
+def trim_predictions(likelihoods, threshold=.0005):
+    stops = stopwords.words('english')
     shared_words = set()
-
     for inst_id, probs in likelihoods.iterrows():
-        num_pred = 0
+        
+        cutoff = probs[probs >= threshold]
 
-        for predicted_word, prob in probs.nlargest(250).iteritems():
-            if predicted_word in target or len(predicted_word) <= 2 or \
-                re.sub(r'[^a-z]', '', predicted_word) == '' :
+        for predicted_word, prob in cutoff.iteritems():
+            filtered_word = re.sub(r'[^a-z]', '', predicted_word)
+            if len(filtered_word) <= 2 or filtered_word in stops:
                 continue
             else: 
                 shared_words.add(predicted_word)
-                num_pred += 1
 
-            if num_pred == settings.n_samples_per_rep:
-                break
-
+    ## TODO: some columns are the same, should use numerical ids instead of words to select
     return likelihoods[shared_words]
 
 class LMBert():

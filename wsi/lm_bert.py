@@ -1,3 +1,4 @@
+from scipy.spatial.distance import num_obs_dm
 from transformers import BertForMaskedLM, BertTokenizer
 from nltk.corpus import stopwords
 from tqdm import tqdm
@@ -22,20 +23,52 @@ def apply_softmax(values):
     e_x = np.exp(values - np.max(values))
     return e_x / e_x.sum()
 
-def trim_predictions(likelihoods, threshold=.0005):
+def trim_predictions_count(likelihoods, n=50):
     stops = stopwords.words('english')
     shared_words = set()
+    num_words = []
     for inst_id, probs in likelihoods.iterrows():
-        
-        cutoff = probs[probs >= threshold]
-
-        for predicted_word, prob in cutoff.iteritems():
+        nums = []
+        for predicted_word, prob in probs.nlargest(500).iteritems():
             filtered_word = re.sub(r'[^a-z]', '', predicted_word)
             if len(filtered_word) <= 2 or filtered_word in stops:
                 continue
-            else: 
-                shared_words.add(predicted_word)
+             
+            shared_words.add(predicted_word)
+            nums.append(predicted_word)
+            if len(nums) >= n:
+                break
+        num_words.append(len(nums))
 
+    print(len(shared_words), sum(num_words)//len(num_words))
+    print(num_words[:5])
+    return likelihoods[shared_words]
+
+def trim_predictions(likelihoods, targets, cutoff=1, threshold=.0005):
+    stops = stopwords.words('english')
+    stops.extend(targets)
+
+    shared_words = set()
+    num_words = []
+    for inst_id, probs in likelihoods.iterrows(): 
+        probs = probs.sort_values(ascending=False)
+
+        cumulative_density = 0
+        num = 0
+        for predicted_word, prob in probs.iteritems():
+            filtered_word = re.sub(r'[^a-z]', '', predicted_word)
+            if len(filtered_word) <= 2 or filtered_word in stops:
+                continue
+             
+            shared_words.add(predicted_word)
+            cumulative_density += prob
+            num += 1
+            if cumulative_density >= cutoff or prob < threshold:
+                break
+        num_words.append(num)
+
+    # print(len(shared_words), sum(num_words)//len(num_words))
+    # print(num_words[:5])
     ## TODO: some columns are the same, should use numerical ids instead of words to select
     return likelihoods[shared_words]
 

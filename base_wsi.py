@@ -11,23 +11,28 @@ import pandas as pd
 from glob import glob
 import time
 
-def get_data(sentence_path, target_path, corpus_name=None):
+def get_data(sentence_path, target_path, corpus_name=None, limit_occurences=True):
     sentence_data = pd.read_csv(sentence_path, usecols=['corpus', 'sent_id'])
     sentence_data.set_index(['sent_id'], inplace=True)
 
     target_data = pd.read_csv(target_path)
     target_data = target_data.join(sentence_data, on='sent_id')
+    print(f'{len(target_data)} total target instances pulled')
 
     if corpus_name is not None:
         target_data = target_data[target_data.corpus == corpus_name]
-    
+        print(f'{len(target_data)} instances within {corpus_name}')
+
     ## Only picking rows with 1 target
-    vc = target_data.sent_id.value_counts()
-    ids = vc[vc == 1].index
-    target_data = target_data[target_data.sent_id.isin(ids)]
+    # TODO: this isn't ideal; the problem being avoided is making sure that no sentence with mult. targets
+    # only gets sense induction for one of them
+    if limit_occurences:
+        vc = target_data.sent_id.value_counts()
+        ids = vc[vc <= 2].index
+        target_data = target_data[target_data.sent_id.isin(ids)]
+        print(f'{len(target_data)} after limit applied')
 
     target_data.formatted_sentence = target_data.formatted_sentence.apply(eval)
-    print(f'{len(target_data)} target instances pulled')
 
     return target_data
 
@@ -64,9 +69,9 @@ def convert_to_local(t):
     return datetime.strftime(t, '%H:%M')
 
 def make_predictions(
-    data: pd.DataFrame, 
-    dataset_desc: str, 
-    output_path: str, 
+    data: pd.DataFrame,
+    dataset_desc: str,
+    output_path: str,
     targets: List[str],
     subset_num=None,
     resume_predicting=False
@@ -106,7 +111,7 @@ def make_predictions(
     for n, target_alts in enumerate(sorted(targets)):
         # break
         target = target_alts[0]
-        print(f'\n{n} / {len(targets)} : {" ".join(target_alts)}')
+        print(f'\n{n+1} / {len(targets)} : {" ".join(target_alts)}')
 
         data_subset, num_rows = target_rows[target]
 
@@ -129,7 +134,7 @@ def make_predictions(
             print(f'\tPredictions saved')
 
 #%%
-def cluster_predictions(
+def perform_clustering(
         data: pd.DataFrame,
         targets: List[str],
         dataset_desc: str, 
@@ -154,11 +159,11 @@ def cluster_predictions(
     for n, target_alts in enumerate(sorted(targets)):
         # break
         target = target_alts[0]
-        print(f'\n{n} / {len(targets)} : {" ".join(target_alts)}')
+        print(f'\n{n+1} / {len(targets)} : {" ".join(target_alts)}')
 
         predictions = pd.read_pickle(f'{output_path}/predictions/{target}.pkl')
-        print(f'\tPredictions loaded')
-        predictions = trim_predictions(predictions)
+        # print(f'\tPredictions loaded')
+        predictions = trim_predictions(predictions, target_alts)
 
         with open(logging_file, 'a') as flog:
             print('====================================\n', file=flog)
@@ -167,7 +172,7 @@ def cluster_predictions(
                 print(f'Alt form: {target_alts[1]}', file=flog)
 
             if len(predictions) >= 100:
-                print('\n\tClustering likelihoods...')
+                # print('\n\tClustering likelihoods...')
                 start = time.time()
                 print(f'\t  Start time : {convert_to_local(start)}')
                 print(f'\t  Start time : {convert_to_local(start)}', file=flog)
@@ -193,7 +198,6 @@ def cluster_predictions(
 
     sense_data = pd.concat(sense_data)
     sense_data.to_csv(f'{output_path}/target_sense_labels.csv', index=False)
-
 # %%
 def save_results(data, dataset_desc, target, sense_clusters, output_path):
     cluster_data = []
@@ -224,10 +228,11 @@ def save_results(data, dataset_desc, target, sense_clusters, output_path):
 
     return cluster_data
 
-def create_sense_sentences(sentence_data, output_path):
+def create_sense_sentences(sentence_path, output_path):
     target_data = pd.read_csv(f'{output_path}/target_sense_labels.csv')
     target_data.set_index('word_index', inplace=True) ## maybe this default
 
+    sentence_data = pd.read_csv(sentence_path, usecols=['sent_id', 'word_index_sentence'])
     sentence_data.word_index_sentence = sentence_data.word_index_sentence.apply(eval)
     sentence_data.set_index('sent_id', inplace=True) ## maybe this default
 
@@ -239,11 +244,13 @@ def create_sense_sentences(sentence_data, output_path):
         for word in sent:
             if '.' not in word:
                 sense_sent.append(word)
+            elif word in target_data.index:
+                t_row = target_data.loc[word]
+                sense = f'{t_row.target}.{t_row.cluster}'
+                sense_sent.append(sense)
             else:
-                if word in target_data.index:
-                    t_row = target_data.loc[word]
-                    sense = f'{t_row.target}.{t_row.cluster}'
-                    sense_sent.append(sense)
+                print(f'Bad! {sent_id}')
+                break
 
         sense_sents.append([sent_id, sense_sent])
 

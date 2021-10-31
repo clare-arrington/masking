@@ -231,16 +231,18 @@ def save_results(data, dataset_desc, target, sense_clusters, output_path):
 def create_sense_sentences(sentence_path, output_path):
     target_data = pd.read_csv(f'{output_path}/target_sense_labels.csv')
     target_data.set_index('word_index', inplace=True) ## maybe this default
+    ids = target_data.sent_id.unique()
 
     sentence_data = pd.read_csv(sentence_path, usecols=['sent_id', 'word_index_sentence'])
     sentence_data.word_index_sentence = sentence_data.word_index_sentence.apply(eval)
     sentence_data.set_index('sent_id', inplace=True) ## maybe this default
 
     sense_sents = []
-    for sent_id, row in sentence_data.iterrows():
+    for sent_id, row in sentence_data.iloc[ids].iterrows():
         sent = row['word_index_sentence']
 
         sense_sent = []
+        add_sent = True
         for word in sent:
             if '.' not in word:
                 sense_sent.append(word)
@@ -250,9 +252,11 @@ def create_sense_sentences(sentence_path, output_path):
                 sense_sent.append(sense)
             else:
                 print(f'Bad! {sent_id}')
+                add_sent = False
                 break
 
-        sense_sents.append([sent_id, sense_sent])
+        if add_sent:
+            sense_sents.append([sent_id, sense_sent])
 
     sense_data = pd.DataFrame(sense_sents, columns=['sent_id', 'sense_sentence'])
     sense_data.set_index('sent_id', inplace=True) 

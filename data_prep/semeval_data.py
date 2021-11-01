@@ -6,7 +6,42 @@ def get_targets(main_path, remove_pos=False):
     with open(f'{main_path}/truth/binary.txt') as fin:
         og_targets = fin.read().strip().split('\n')
     
-    targets = []
+    targets = ['little', 'much', 'hand', 'long', 
+               'look', 'nul', 'shall', 'first', 
+               'good', 'place', 'two', 'life', 
+               'old', 'never', 'without', 'yet', 
+               'many', 'heart', 'might', 'thing', 
+               'leave', 'seem', 'love', 'power', 
+               'feel', 'though', 'far', 'country', 
+               'way', 'mind', 'tell', 'work', 
+               'still', 'hear', 'call', 'people', 
+               'form', 'house', 'friend', 'young', 
+               'stand', 'speak', 'last', 'world', 
+               'ever', 'get', 'present', 'whole', 
+               'right', 'pass', 'high', 'let', 
+               'god', 'become', 'child', 'bring', 
+               'another', 'father', 'light', 
+               'among', 'law', 'mean', 'fall', 
+               'turn', 'name', 'nothing', 'whose', 
+               'moment', 'general', 'side', 
+               'nature', 'away', 'hope', 'use', 
+               'subject', 'spirit', 'thy', 
+               'character', 'however', 'three', 
+               'large', 'keep', 'soon', 'return', 
+               'live', 'night', 'hold', 'government', 
+               'back', 'person', 'case', 'put', 
+               'lay', 'believe', 'hour', 'point', 
+               'foot', 'woman', 'sir', 'true', 
+               'water', 'cause', 'mother', 'less',
+               'always', 'receive', 'course', 
+               'home', 'better', 'half', 'order',
+               'death', 'arm', 'manner', 'small',
+               'within', 'almost', 'follow', 'lady',
+               'open', 'voice', 'public', 'meet',
+               'party', 'truth', 'want', 'fact', 
+               'soul', 'poor', 'object']
+
+    # targets = []    
     for target in og_targets:
         word, label = target.split('\t')
         if remove_pos:

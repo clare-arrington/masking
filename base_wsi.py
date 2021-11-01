@@ -11,6 +11,7 @@ import pandas as pd
 from glob import glob
 import time
 
+## TODO: sent_id is messed up. Ahhhhhhhhhhh
 def get_data(sentence_path, target_path, corpus_name=None, limit_occurences=True):
     sentence_data = pd.read_csv(sentence_path, usecols=['corpus', 'sent_id'])
     sentence_data.set_index(['sent_id'], inplace=True)
@@ -28,7 +29,7 @@ def get_data(sentence_path, target_path, corpus_name=None, limit_occurences=True
     # only gets sense induction for one of them
     if limit_occurences:
         vc = target_data.sent_id.value_counts()
-        ids = vc[vc <= 2].index
+        ids = vc[vc == 1].index
         target_data = target_data[target_data.sent_id.isin(ids)]
         print(f'{len(target_data)} after limit applied')
 
@@ -228,35 +229,65 @@ def save_results(data, dataset_desc, target, sense_clusters, output_path):
 
     return cluster_data
 
-def create_sense_sentences(sentence_path, output_path):
-    target_data = pd.read_csv(f'{output_path}/target_sense_labels.csv')
+def create_sense_sentences(sentence_path, target_path, output_path):
+    target_data = pd.read_csv(
+        f'{output_path}/target_sense_labels.csv', 
+        usecols=['word_index', 'target', 'cluster'])
     target_data.set_index('word_index', inplace=True) ## maybe this default
+    print(f'{len(target_data)} targets predicted')
+
+    ## TODO: somehow there are terms that don't have a sent_id;
+    ## how did that even happen?
+    good_target_data = pd.read_csv(target_path,
+        usecols=['word_index', 'sent_id'])
+    good_target_data.set_index('word_index', inplace=True) ## maybe this default
+    
+    target_data = target_data.join(good_target_data)
+    target_data.dropna(inplace=True)
+    target_data.sent_id = target_data.sent_id.astype(int)
+    print(f'{len(target_data)} targets after nulls removed')
+
     ids = target_data.sent_id.unique()
+    print(f'{len(ids)} unique sentences')
+    targets = list(target_data.target.unique())
+    print(f'{len(targets)} targets selected')
 
     sentence_data = pd.read_csv(sentence_path, usecols=['sent_id', 'word_index_sentence'])
     sentence_data.word_index_sentence = sentence_data.word_index_sentence.apply(eval)
     sentence_data.set_index('sent_id', inplace=True) ## maybe this default
+    sentence_data = sentence_data.iloc[ids]
 
     sense_sents = []
-    for sent_id, row in sentence_data.iloc[ids].iterrows():
+    num_bad = 0
+    for sent_id, row in sentence_data.iterrows():
         sent = row['word_index_sentence']
 
         sense_sent = []
         add_sent = True
         for word in sent:
+            target = word.split('.')[0]
             if '.' not in word:
                 sense_sent.append(word)
+
+            elif target not in targets:
+                sense_sent.append(target)
+
             elif word in target_data.index:
                 t_row = target_data.loc[word]
-                sense = f'{t_row.target}.{t_row.cluster}'
+                sense = f'{target}.{t_row.cluster}'
                 sense_sent.append(sense)
+
             else:
                 print(f'Bad! {sent_id}')
+                num_bad += 1
                 add_sent = False
                 break
 
         if add_sent:
             sense_sents.append([sent_id, sense_sent])
+
+    print(f'{len(sense_sents)} sentences modified with senses')
+    print(f'{num_bad} sentences were skipped')
 
     sense_data = pd.DataFrame(sense_sents, columns=['sent_id', 'sense_sentence'])
     sense_data.set_index('sent_id', inplace=True) 

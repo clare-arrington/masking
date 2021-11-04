@@ -39,7 +39,6 @@ def get_cluster_centers(data, n_senses, sense_clusters=None):
     return cluster_centers
 
 #%%
-## TODO: these two below could have the whole remapping step in a function i think
 def cluster_predictions(predictions, settings):
     labels, cluster_centers = perform_clustering(predictions, settings)
     n_senses = np.max(labels) + 1
@@ -92,4 +91,4 @@ def cluster_predictions(predictions, settings):
             min_instances += 10
             big_senses = [sense for sense, cluster in sense_clusters.items() if len(cluster) >= min_instances]
 
-    return sense_clusters, cluster_centers
+    return sense_clusters, cluster_centers  

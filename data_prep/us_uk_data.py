@@ -21,7 +21,7 @@ def get_us_uk_targets(path, get_us=False, get_uk=False):
     return targets
 
 #%%
-main_path = '/home/clare/Data/corpus_data/us_uk'
+main_path = '/data/arrinj/corpus_data/us_uk'
 
 corpus_targets = { 
     'bnc': get_us_uk_targets(f'{main_path}/truth', get_uk=True),
@@ -40,3 +40,4 @@ sentence_data, target_data = \
 save_data(sentence_data, target_data, subset_path)
 
 print('All done!')
+# %%

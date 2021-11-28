@@ -7,23 +7,25 @@ import spacy
 import pickle
 import re
 
-def trim_pre(pre, cutoff=100):
-    new_pre = ''
-    for word in reversed(pre.split()):
-        new_pre = f'{word} {new_pre}'
-        if len(new_pre) > cutoff:
+## Trim the sentence around a term, either the section before or after
+## Same approach for both, just differently added
+## Might be a slicker way to do this
+def trim(old_sent, pre=True, cutoff=100):
+    new_sent = ''
+    words = old_sent.split()
+    if pre:
+        words = reversed(words)
+    
+    for word in words:
+        if pre:
+            new_sent = f'{word} {new_sent}'
+        else:
+            new_sent = f'{new_sent} {word}'
+
+        if len(new_sent) > cutoff:
             break
 
-    return new_pre
-
-def trim_post(post, cutoff=100):
-    new_post = ''
-    for word in post.split():
-        new_post = f'{new_post} {word}'
-        if len(new_post) > cutoff:
-            break
-
-    return new_post
+    return new_sent
 
 def preprocess_data(docs, corpus_name, path):
     nlp = spacy.load("en_core_web_sm")
@@ -45,7 +47,9 @@ def preprocess_data(docs, corpus_name, path):
                 columns=['sent_id', 'corpus', 'sentence', 'processed_sentence'])
     sentences.to_pickle(path, index=False)
 
-def pull_from_preprocessed_data(data_path, save_path, targets):
+## TODO: this should be integrated with other methods below
+def pull_from_preprocessed_data(
+    data_path, save_path, targets):
 
     print(f'Results will be saved to {save_path}')
     Path(save_path).mkdir(parents=True, exist_ok=True)
@@ -53,7 +57,7 @@ def pull_from_preprocessed_data(data_path, save_path, targets):
     data = pd.read_csv(data_path)
     data.set_index('sent_id', inplace=True)
     data['processed_sentence'] = data['processed_sentence'].apply(literal_eval)
-    print(f'\nAll Sents: {len(data)}')
+    print(f'\nAll Sents: {len(data):,}')
 
     word_indices = {word:0 for word in targets}
     target_sent_ids = []
@@ -81,8 +85,8 @@ def pull_from_preprocessed_data(data_path, save_path, targets):
             word_index = f'{word}.{index}'
             word_index_sent.append(word_index)
 
-            pre = trim_pre(' '.join(words[:i]))
-            post = trim_post(' '.join(words[i + 1:]))
+            pre = trim(' '.join(words[:i]))
+            post = trim(' '.join(words[i + 1:]), pre=False)
 
             formatted_sent = (pre, word, post)
             length = len(pre) + len(post)
@@ -93,13 +97,13 @@ def pull_from_preprocessed_data(data_path, save_path, targets):
         word_index_sents.append(word_index_sent)
         target_sent_ids.append(sent_id)
 
-    print(f'Target Sents: {len(target_sent_ids)}')
+    print(f'Target Sents: {len(target_sent_ids):,}')
     sentence_data = data.loc[target_sent_ids]
     sentence_data['word_index_sentence'] = word_index_sents
     sentence_data.to_pickle(f'{save_path}/target_sentences.pkl')
     print('Target sents saved!\n')
 
-    print(f'Non-Target Sents: {len(non_target_sents)}')
+    print(f'Non-Target Sents: {len(non_target_sents):,}')
     with open(f'{save_path}/non_target.pkl', 'wb') as pout:
         pickle.dump(non_target_sents, pout)
     print('Non-target sents saved!\n')
@@ -120,15 +124,14 @@ def parse_sentences(
     target_data = []
     sent_id = sent_id_shift
 
-    print(f'Parsing sentences for {corpus_name.upper()}')
+    print(f'\n== Parsing sentences for {corpus_name} ==')
     with open(f'{corpora_path}/{corpus_name}.txt') as fin:
         lines = [line.lower().strip() for line in fin.readlines()]
-        print(f'\t{len(lines)} sentences pulled')
+        print(f'\t{len(lines):,} sentences pulled')
         lines = list(set(lines))
-        print(f'\t{len(lines)} sentences left after duplicates removed')
+        print(f'\t{len(lines):,} sentences left after duplicates removed')
 
     for line in tqdm(lines):
-
         line = line.lower().strip()
         words = re.findall(pattern, line)
         found_targets = set(targets).intersection(set(words))
@@ -158,8 +161,8 @@ def parse_sentences(
             pre = ' '.join(fully_cleaned_words[:i])
             post = ' '.join(fully_cleaned_words[i + 1:])
 
-            pre = trim_pre(pre)
-            post = trim_post(post)
+            pre = trim(pre)
+            post = trim(post, pre=False)
 
             formatted_sent = (pre, just_target, post)
             length = len(pre) + len(post)
@@ -173,18 +176,19 @@ def parse_sentences(
         sentence_data.append(sentence_info)
         sent_id += 1
 
-    print(f'\nTarget Sents: {len(sentence_data)}')
-    print(f'Non-Target Sents: {len(non_target_sents)}')
+    print(f'\nTarget Sents: {len(sentence_data):,}')
+    print(f'Non-Target Sents: {len(non_target_sents):,}')
     with open(f'{non_target_path}/{corpus_name}_non_target.dat', 'wb') as pout:
         pickle.dump(non_target_sents, pout)
+    print('Non-Target Saved!')
 
-    print('Non-Target Saved!\n')
-
-    ## TODO: is this correct?
     return sentence_data, target_data, word_indices, sent_id
 
 #%%
-def pull_target_data(corpus_targets, corpora_path, subset_path, pattern=r'[a-z]+'): 
+def pull_target_data(
+    corpus_targets, corpora_path, 
+    subset_path, pattern=r'[a-z]+'): 
+    
     ## Setup 
     all_targets = [target for targets in corpus_targets.values() for target in targets]
     word_indices = {word:0 for word in set(all_targets)}
@@ -209,15 +213,19 @@ def pull_target_data(corpus_targets, corpora_path, subset_path, pattern=r'[a-z]+
     target_data = pd.DataFrame(target_data, columns=['word_index', 'target', 'formatted_sentence', 'length', 'sent_id'])
     sentence_data = pd.DataFrame(sentence_data, columns=['sent_id', 'corpus', 'sentence', 'word_index_sentence'])
 
-    print('\n\nTarget Counts')
+    print('\nTarget Counts')
     print(target_data.target.value_counts())
-    print(f'Total Target Sents: {len(sentence_data)}')
+    print(f'\nTotal Target Sents: {len(sentence_data):,}')
 
     return sentence_data, target_data
 
+## TODO: should I save with index set?
 def save_data(sentence_data, target_data, output_path):
-    sentence_data.to_csv(f'{output_path}/target_sentences.csv', index=False)
-    target_data.to_csv(f'{output_path}/target_information.csv', index=False)
+    sentence_data.set_index('sent_id', inplace=True)
+    sentence_data.to_pickle(f'{output_path}/target_sentences.pkl')
+    
+    target_data.set_index('word_index', inplace=True)
+    target_data.to_pickle(f'{output_path}/target_information.pkl')
 
     print('\nTarget data saved!')
 # %%

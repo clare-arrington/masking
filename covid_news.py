@@ -12,7 +12,7 @@ def run_slice_predictions(input_path, output_path, corpus_name, slice_num, resum
     targets = [[target] for target in target_data.target.unique() if target != 'coronavirus']
     print(f'{len(targets)} targets for masking')
 
-    make_predictions(target_data, dataset_desc, masking_path, targets.copy(),
+    make_predictions(target_data, targets.copy(), dataset_desc, masking_path, 
                     subset_num=10000, resume_predicting=resume)
 
     make_clusters(target_data, dataset_desc, masking_path, 

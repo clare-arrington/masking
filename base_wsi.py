@@ -2,8 +2,6 @@
 from wsi.lm_bert import LMBert, trim_predictions
 from wsi.WSISettings import DEFAULT_PARAMS, WSISettings
 from wsi.wsi_clustering import cluster_predictions
-
-from ast import literal_eval
 from typing import List
 from datetime import datetime
 from dateutil import tz
@@ -12,8 +10,12 @@ import pandas as pd
 from glob import glob
 import time
 
+## sentence path is needed if corpus name is specified
+## is there another use?
+# occurence limit - requires target to show up n times or its cut out
+# min length - requires sentence to be above length k, important for context window
 def get_data(target_path, sentence_path=None, corpus_name=None, 
-             occurence_limit=None, length_minimum=25):
+             occurence_limit=25, length_minimum=25):
     if 'csv' in target_path:
         target_data = pd.read_csv(target_path)
     elif 'pkl' in target_path:
@@ -61,16 +63,15 @@ def pull_rows(data, subset_num):
     vc = data.target.value_counts(ascending=True)
     for target in vc.index:        
         # If the target is the only thing in the sent, we'll get nonsense. 
-        ## TODO: issue if we disclude based on length here :/
-        data_subset = data[(data.target == target) & (data.length >= 25)]
+        data_subset = data[(data.target == target)]
         print(target, len(data_subset))
 
-        ## If too big, skip for now. 
+        ## If too big, completely skip for now. 
         if subset_num is not None and (len(data_subset) > subset_num):
             continue
         else:
-            ## Save the ids of all samples in case they overlap, 
-            ## since one sentence can have multiple targets, we want to include them all.
+            ## Save the ids of all samples in case they overlap. 
+            ## Since one sentence can have multiple targets, we want to include them all.
 
             target_rows[target] = data_subset
             # before = len(sent_ids)
@@ -128,11 +129,18 @@ def convert_to_local(t):
 
     return datetime.strftime(t, '%H:%M')
 
+def record_time(desc):
+    t = convert_to_local(time.time())
+    t_str = f'\t  {desc.capitalize()} time : {t}'
+    print(t_str)
+    
+    return f'\n{t_str}'
+
 def make_predictions(
-    data: pd.DataFrame,
+    target_data: pd.DataFrame,
+    targets: List[str],
     dataset_desc: str,
     output_path: str,
-    targets: List[str],
     subset_num=None,
     resume_predicting=False
     ):
@@ -151,7 +159,7 @@ def make_predictions(
     if not resume_predicting:
         with open(logging_file, 'w') as flog:
             print(dataset_desc, file=flog)
-            print(f'\n{len(data)} rows loaded', file=flog)
+            print(f'\n{len(target_data)} rows loaded', file=flog)
             print(f'{len(targets)} targets loaded\n', file=flog)
     else:
         already_predicted = glob(f'{output_path}/predictions/*.pkl')
@@ -168,7 +176,7 @@ def make_predictions(
             targets.remove(target)
         print(f'{len(targets)} targets going to be clustered')
 
-    target_rows = pull_rows(data, subset_num)
+    target_rows = pull_rows(target_data, subset_num)
 
     for n, target_alts in enumerate(sorted(targets)):
         # break
@@ -185,13 +193,9 @@ def make_predictions(
                 print(f'Alt form: {target_alts[1]}', file=flog)
 
             print(f'\tPredicting for {num_rows} rows...')
-            start = time.time()
-            print(f'\t  Start time : {convert_to_local(start)}')
-            print(f'\n\t  Start time : {convert_to_local(start)}', file=flog)
+            print(record_time('start'), file=flog)
             predictions = lm.predict_sent_substitute_representatives(data_subset, settings)
-            end = time.time()
-            print(f'\t    End time : {convert_to_local(end)}\n', file=flog)
-            print(f'\t    End time : {convert_to_local(end)}')
+            print(record_time('end'), file=flog)
             
             predictions.to_pickle(f'{output_path}/predictions/{target}.pkl')
             print(f'\tPredictions saved')
@@ -199,9 +203,9 @@ def make_predictions(
 #%%
 def make_clusters(
     target_data: pd.DataFrame,
+    targets: List[str],
     dataset_desc: str,
     output_path: str,
-    targets: List[str],
     resume_clustering: bool = False
     ):
 
@@ -250,14 +254,10 @@ def make_clusters(
                 print(f'Alt form: {target_alts[1]}', file=flog)
 
             if len(predictions) >= 100:
-                # print('\n\tClustering likelihoods...')
-                start = time.time()
-                print(f'\t  Start time : {convert_to_local(start)}')
-                print(f'\t  Start time : {convert_to_local(start)}', file=flog)
+                # print('\n\tClustering likelihoods...')            
+                print(record_time('start'), file=flog)
                 sense_clusters, cluster_centers = cluster_predictions(predictions, settings)
-                end = time.time()
-                print(f'\t    End time : {convert_to_local(end)}', file=flog)
-                print(f'\t    End time : {convert_to_local(end)}')
+                print(record_time('end'), file=flog)
             else:
                 ## We don't want to cluster a target that is too small
                 print('\tSkipping WSI; not enough rows\n', file=flog)

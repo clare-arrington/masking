@@ -1,4 +1,5 @@
 #%%
+from ast import literal_eval
 from pathlib import Path
 from tqdm import tqdm
 import pandas as pd
@@ -24,16 +25,91 @@ def trim_post(post, cutoff=100):
 
     return new_post
 
-## TODO: add this
-def lemmatize():
+def preprocess_data(docs, corpus_name, path):
     nlp = spacy.load("en_core_web_sm")
 
-    docs = ["We've been running all day.", "Let's be better."]
+    sentences = []
+    sent_id = 0
+    processed = nlp.pipe(docs, batch_size=50, 
+        n_process=1, disable=["ner", "textcat"])
+    for doc in tqdm(processed):
+        for sent in doc.sents:
+            p_sent = [token.lemma_ for token in sent if token.text.isalpha() == True]
+            if p_sent == []:
+                continue
+            sent_id += 1
+            sent_info = [sent_id, corpus_name, str(sent), p_sent]
+            sentences.append(sent_info)
 
-    for doc in nlp.pipe(docs, batch_size=32, n_process=3, disable=["parser", "ner"]):
-        print([tok.lemma_ for tok in doc])
+    sentences = pd.DataFrame(sentences,
+                columns=['sent_id', 'corpus', 'sentence', 'processed_sentence'])
+    sentences.to_pickle(path, index=False)
 
+def pull_from_preprocessed_data(data_path, save_path, targets):
 
+    print(f'Results will be saved to {save_path}')
+    Path(save_path).mkdir(parents=True, exist_ok=True)
+
+    data = pd.read_csv(data_path)
+    data.set_index('sent_id', inplace=True)
+    data['processed_sentence'] = data['processed_sentence'].apply(literal_eval)
+    print(f'\nAll Sents: {len(data)}')
+
+    word_indices = {word:0 for word in targets}
+    target_sent_ids = []
+    non_target_sents = []
+    word_index_sents = []
+    target_data = []
+
+    for sent_id, row in tqdm(data.iterrows()):
+        words = row.processed_sentence
+        found_targets = set(targets).intersection(set(words))
+        if found_targets == set():
+            sent = ' '.join(words)
+            non_target_sents.append(sent)
+            continue
+        
+        word_index_sent = []
+        for i, word in enumerate(words):
+            if word not in found_targets:
+                word_index_sent.append(word)
+                continue
+
+            index = word_indices[word]
+            word_indices[word] += 1
+
+            word_index = f'{word}.{index}'
+            word_index_sent.append(word_index)
+
+            pre = trim_pre(' '.join(words[:i]))
+            post = trim_post(' '.join(words[i + 1:]))
+
+            formatted_sent = (pre, word, post)
+            length = len(pre) + len(post)
+
+            target_info = [word_index, word, formatted_sent, length, sent_id]
+            target_data.append(target_info)
+
+        word_index_sents.append(word_index_sent)
+        target_sent_ids.append(sent_id)
+
+    print(f'Target Sents: {len(target_sent_ids)}')
+    sentence_data = data.loc[target_sent_ids]
+    sentence_data['word_index_sentence'] = word_index_sents
+    sentence_data.to_pickle(f'{save_path}/target_sentences.pkl')
+    print('Target sents saved!\n')
+
+    print(f'Non-Target Sents: {len(non_target_sents)}')
+    with open(f'{save_path}/non_target.pkl', 'wb') as pout:
+        pickle.dump(non_target_sents, pout)
+    print('Non-target sents saved!\n')
+
+    print(f'Targets found: {len(target_data)}')
+    print('\nTarget Counts')
+    target_data = pd.DataFrame(target_data, columns=['word_index', 'target', 'formatted_sentence', 'length', 'sent_id'])
+    target_data.to_pickle(f'{save_path}/target_information.pkl')
+    # print(target_data.target.value_counts())
+    print('Target data saved!')
 
 def parse_sentences(
     corpora_path, non_target_path, corpus_name, 

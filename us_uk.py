@@ -1,12 +1,12 @@
 #%%
-from base_wsi import get_data, make_predictions, perform_clustering, create_sense_sentences 
+from base_wsi import get_data, make_predictions, make_clusters, create_sense_sentences 
 
 def get_targets(target_data, corpus_name):
     target_counts = target_data.target.value_counts()
     filtered_targets = target_counts[target_counts >= 20]
     filtered_targets = list(filtered_targets.keys())
     
-    ## TODO: solve this problem tbh
+    ## TODO: solve this problem 
     ## These are removed from the dissimilar group b/c they're also in the similar group
     exclude = ['football', 'gas', 'hood', 'nappy', 'pavement',
             'rubber', 'subway', 'suspenders', 'sweets', 'vest']
@@ -35,8 +35,8 @@ def get_targets(target_data, corpus_name):
 
 ## Pull data
 corpus_name = 'bnc'
-sentence_path = '/data/arrinj/corpus_data/us_uk/subset/target_sentences.csv'
-target_path = '/data/arrinj/corpus_data/us_uk/subset/target_information.csv'
+sentence_path = '/data/arrinj/corpus_data/us_uk/subset/target_sentences.pkl'
+target_path = '/data/arrinj/corpus_data/us_uk/subset/target_information.pkl'
 output_path = f'/data/arrinj/masking_results/us_uk/{corpus_name}'
 
 if corpus_name == 'bnc':
@@ -48,15 +48,19 @@ else:
     corpus_name = None
 
 #%%
-target_data = get_data(sentence_path, target_path, corpus_name)
+target_data = get_data(target_path, sentence_path, corpus_name)
 targets = get_targets(target_data, corpus_name)
 
 #%%
-# make_predictions(target_data, dataset_desc, output_path, targets,
-# subset_num=15000, resume_predicting=False)
+make_predictions(target_data, targets, dataset_desc, output_path, subset_num=15000)
 
-# perform_clustering(target_data, targets, dataset_desc, output_path)
+make_clusters(
+    target_data, targets, 
+    dataset_desc, output_path, plot_clusters=True)
+
+# %%
+create_sense_sentences(sentence_path, output_path)
 
 print('Done!')
+
 # %%
-create_sense_sentences(sentence_path, target_path, output_path)

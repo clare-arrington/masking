@@ -267,7 +267,7 @@ def make_clusters(
             else:
                 ## We don't want to cluster a target that is too small
                 print('\tSkipping WSI; not enough rows\n', file=flog)
-                sense_clusters = {'0' : list(predictions.index)}
+                sense_clusters = {0 : list(predictions.index)}
                 cluster_centers = get_cluster_centers(predictions, 1, sense_clusters)
 
             print('\n\tCluster results')

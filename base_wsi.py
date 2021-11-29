@@ -317,12 +317,12 @@ def save_results(
 def create_sense_sentences(sentence_path, output_path):
     target_data = pd.read_pickle(
         f'{output_path}/target_sense_labels.pkl')
-    print(f'{len(target_data)} targets predicted')
+    print(f'{len(target_data):,} targets predicted')
 
     targets = list(target_data.target.unique())
     print(f'{len(targets)} targets selected')
     ids = target_data.sent_id.unique()
-    print(f'{len(ids)} unique sentences')
+    print(f'{len(ids):,} unique sentences')
 
     ## TODO: somehow there are terms that don't have a sent_id;
     ## how did that even happen?
@@ -347,7 +347,7 @@ def create_sense_sentences(sentence_path, output_path):
     good_ids = sentence_data.index.intersection(ids)
     if len(good_ids) < len(ids):
         bad_ids = set(ids) - set(good_ids)
-        print(f'Removing {len(bad_ids)} sents from these targets:')
+        print(f'Removing {len(bad_ids):,} sents from these targets:')
         print(target_data[target_data.sent_id.isin(bad_ids)].target.unique())
         ids = good_ids
     sentence_data = sentence_data.loc[ids]
@@ -381,8 +381,8 @@ def create_sense_sentences(sentence_path, output_path):
         if add_sent:
             sense_sents.append([sent_id, sense_sent])
 
-    print(f'{len(sense_sents)} sentences modified with senses')
-    print(f'{num_bad} sentences were skipped')
+    print(f'{len(sense_sents):,} sentences modified with senses')
+    print(f'{num_bad:,} sentences were skipped')
 
     sense_data = pd.DataFrame(sense_sents, columns=['sent_id', 'sense_sentence'])
     sense_data.set_index('sent_id', inplace=True) 

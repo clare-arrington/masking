@@ -1,6 +1,5 @@
 #%%
 from collections import Counter, defaultdict
-from pandas.core.arrays import categorical
 from scipy.spatial.distance import pdist, cdist
 from scipy.cluster.hierarchy import linkage, fcluster
 from sklearn.decomposition import PCA
@@ -86,12 +85,11 @@ def plot_clustered_preds(preds, labels, target_alts, path):
     fig.write_html(path)
 
 def perform_clustering(predictions, settings, method='average'):
-    ## Pairwise distances; going with euclidean since we just have weights
-    ## Instead of a full distribution
-    dists = pdist(predictions)
+    ## Pairwise distances; going with cosine 
+    dists = pdist(predictions, metric='cosine')
 
     ## Hierarchical agglomerative clustering
-    Z = linkage(dists, method=method)
+    Z = linkage(dists, method=method, metric='cosine')
 
     cutoff = min(settings.max_number_senses, len(Z[:,2]))
     distance_crit = Z[-cutoff, 2]
@@ -113,7 +111,7 @@ def cluster_predictions(predictions, target_alts, settings, plot_clusters, plot_
     labels, cluster_centers = perform_clustering(predictions, settings)
     n_senses = np.max(labels) + 1
 
-    if plot_path != '':
+    if plot_clusters:
         init_path = f'{plot_path}/{target_alts[0]}_initial_clusters.html'
         plot_clustered_preds(predictions, labels, target_alts, init_path)
 
@@ -123,7 +121,7 @@ def cluster_predictions(predictions, target_alts, settings, plot_clusters, plot_
         sense_clusters[label].append(inst_id)
 
     ## Find center (median) of sense clusters
-    cluster_centers = get_cluster_centers(predictions, n_senses, sense_clusters=sense_clusters)
+    cluster_centers = get_cluster_centers(predictions, n_senses, sense_clusters)
 
     ## Sets might have many small clusters instead of any big
     ## So we can iteratively get big
@@ -141,7 +139,7 @@ def cluster_predictions(predictions, target_alts, settings, plot_clusters, plot_
         if n_senses == 2:
             big_senses = [0]
 
-        dists = cdist(cluster_centers, cluster_centers)
+        dists = cdist(cluster_centers, cluster_centers, metric='cosine')
         closest_senses = np.argsort(dists, )[:, ]
 
         ## Determine closest sense and set remapping if not big
@@ -157,7 +155,7 @@ def cluster_predictions(predictions, target_alts, settings, plot_clusters, plot_
 
         sense_clusters = remap_senses(sense_remapping, sense_clusters)
         n_senses = len(sense_clusters)
-        cluster_centers = get_cluster_centers(predictions, n_senses, sense_clusters=sense_clusters)
+        cluster_centers = get_cluster_centers(predictions, n_senses, sense_clusters)
         
         ## 
         if n_senses == 1:
@@ -166,7 +164,7 @@ def cluster_predictions(predictions, target_alts, settings, plot_clusters, plot_
             min_instances += 10
             big_senses = [sense for sense, cluster in sense_clusters.items() if len(cluster) >= min_instances]
 
-    if plot_path != '':
+    if plot_clusters:
         labels = { sent_id:clust for clust, sents in sense_clusters.items() 
                             for sent_id in sents}
 
@@ -174,3 +172,17 @@ def cluster_predictions(predictions, target_alts, settings, plot_clusters, plot_
         plot_clustered_preds(predictions, labels, target_alts, final_path)
 
     return sense_clusters, cluster_centers  
+
+def find_best_sents(target_data, predictions, cluster_centers, sense_clusters): 
+    best_sents = {}
+    for sense, sentences in sense_clusters.items():
+        center = cluster_centers[sense]
+        preds = predictions.loc[sentences]
+        dists = cdist([center], preds, metric='cosine')
+        dist_df = pd.DataFrame( dists[0], 
+                                columns=['dist'], 
+                                index=preds.index)
+        central = dist_df.nsmallest(25, columns=['dist'])
+        data_rows = target_data.loc[central.index]
+        best_sents[sense] = data_rows.formatted_sentence.iteritems()
+    return best_sents

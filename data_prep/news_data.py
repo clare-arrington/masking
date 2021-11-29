@@ -20,22 +20,34 @@ def make_time_slices(data, corpus_name, path):
         preprocess_data(list(rows.content), corpus_name, 
                     f'{path}/{corpus_name}_slice_{slice}.pkl')       
 
-# main_path = '/data/arrinj/corpus_data/news'
-# data = pd.read_pickle('/data/nela/corpus.pickle')
-# data = data.drop(columns=['id', 'timestamp', 'title'])
-# labels = pd.read_csv(f'{main_path}/labels.csv')
-# labels.set_index('source', inplace=True)
+def pull_articles_from_database(main_path):
+    data = pd.read_pickle('/data/nela/corpus.pickle')
+    data = data.drop(columns=['id', 'timestamp', 'title'])
+    labels = pd.read_csv(f'{main_path}/source_labels.csv')
+    labels.set_index('source', inplace=True)
 
-# data = data.join(labels, on='source').dropna()
-# data.cluster = data.cluster.astype(int)
+    ## Not every source has a label, so drop
+    data = data.join(labels, on='source').dropna()
+    data.cluster = data.cluster.astype(int)
 
-# mainstream = data[data.cluster == 2]
-# mainstream = mainstream.drop(
-#     mainstream[mainstream.source.isin(['oann', 'foreignpolicy'])].index)
-# alternative = data[data.cluster == 1]
+    mainstream = data[data.cluster == 2]
+    mainstream = mainstream.drop(
+        mainstream[mainstream.source.isin(['oann', 'foreignpolicy'])].index)
+    alternative = data[data.cluster == 1]
 
+    return mainstream, alternative
+
+main_path = '/data/arrinj/corpus_data/news'
+mainstream, alternative = pull_articles_from_database(main_path)
+
+## Generate full 
+
+def preprocess_full(data, corpus_name, path):
+    preprocess_data(data[['content', 'date']], corpus_name, 
+                f'{path}/{corpus_name}.pkl')       
+
+## Generate time slices
 # main_path += '/corpora/time_slices'
-
 # make_time_slices(mainstream, 'mainstream', main_path)
 # make_time_slices(alternative, 'alternative', main_path)
 
@@ -69,13 +81,15 @@ generic_targets = [
 
 targets = covid_targets + generic_targets
 
-main_path = '/data/arrinj/corpus_data/news'
+# for corpus_name in ['alternative', 'mainstream']:
+#     data_path = f'{main_path}/corpora/{corpus_name}.pkl'
+#     save_path = f'{main_path}/subset/{corpus_name}/'
+#     pull_from_preprocessed_data(data_path, save_path, targets)
 
-for corpus_name in ['alternative', 'mainstream']:
-    for slice in range(0, 6):
-        data_path = f'{main_path}/corpora/time_slices/{corpus_name}_slice_{slice}.csv'
-        save_path = f'{main_path}/subset/{corpus_name}/slice_{slice}'
-        pull_from_preprocessed_data(data_path, save_path, targets)
+    # for slice in range(0, 6):
+    #     data_path = f'{main_path}/corpora/time_slices/{corpus_name}_slice_{slice}.csv'
+    #     save_path = f'{main_path}/subset/{corpus_name}/slice_{slice}'
+    #     pull_from_preprocessed_data(data_path, save_path, targets)
 
 print('All done!')
 # %%

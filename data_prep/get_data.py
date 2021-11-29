@@ -27,25 +27,41 @@ def trim(old_sent, pre=True, cutoff=100):
 
     return new_sent
 
+
+## TODO: fixing for date is bad; but leave it for now
 def preprocess_data(docs, corpus_name, path):
     nlp = spacy.load("en_core_web_sm")
 
     sentences = []
     sent_id = 0
-    processed = nlp.pipe(docs, batch_size=50, 
+    processed = nlp.pipe(docs.content, batch_size=50, 
         n_process=1, disable=["ner", "textcat"])
-    for doc in tqdm(processed):
+    for date, doc in tqdm(zip(docs.date, processed)):
+        ## TODO: this is unideal; not splitting on \n
         for sent in doc.sents:
-            p_sent = [token.lemma_ for token in sent if token.text.isalpha() == True]
+            ## TODO: fix for more than covid-19 I guess
+            p_sent = []
+            for token in sent:
+                t = token.text.lower()
+                if t.isalpha() == True:
+                    p_sent.append(token.lemma_.lower())
+                elif ('covid' in t):
+                    p_sent.extend(re.findall(r'^[a-z]+', t))
+
+            # p_sent = [token.lemma_.lower() for token in sent 
+            #         if token.text.isalpha() == True or ('covid' in token.text)]
+            
             if p_sent == []:
                 continue
             sent_id += 1
-            sent_info = [sent_id, corpus_name, str(sent), p_sent]
+            sent_info = [sent_id, corpus_name, str(sent), p_sent, date]
             sentences.append(sent_info)
-
+            
     sentences = pd.DataFrame(sentences,
-                columns=['sent_id', 'corpus', 'sentence', 'processed_sentence'])
-    sentences.to_pickle(path, index=False)
+                columns=['sent_id', 'corpus', 'sentence', 'processed_sentence', 'date']
+                )
+    sentences.set_index('sent_id', inplace=True)
+    sentences.to_pickle(path)
 
 ## TODO: this should be integrated with other methods below
 def pull_from_preprocessed_data(
@@ -54,8 +70,7 @@ def pull_from_preprocessed_data(
     print(f'Results will be saved to {save_path}')
     Path(save_path).mkdir(parents=True, exist_ok=True)
 
-    data = pd.read_csv(data_path)
-    data.set_index('sent_id', inplace=True)
+    data = pd.read_pickle(data_path)
     data['processed_sentence'] = data['processed_sentence'].apply(literal_eval)
     print(f'\nAll Sents: {len(data):,}')
 
@@ -100,6 +115,7 @@ def pull_from_preprocessed_data(
     print(f'Target Sents: {len(target_sent_ids):,}')
     sentence_data = data.loc[target_sent_ids]
     sentence_data['word_index_sentence'] = word_index_sents
+    ## TODO: should drop preproc here
     sentence_data.to_pickle(f'{save_path}/target_sentences.pkl')
     print('Target sents saved!\n')
 
@@ -219,11 +235,11 @@ def pull_target_data(
 
     return sentence_data, target_data
 
-## TODO: should I save with index set?
 def save_data(sentence_data, target_data, output_path):
     sentence_data.set_index('sent_id', inplace=True)
     sentence_data.to_pickle(f'{output_path}/target_sentences.pkl')
-    
+    print('\Sentence data saved!')
+
     target_data.set_index('word_index', inplace=True)
     target_data.to_pickle(f'{output_path}/target_information.pkl')
 

@@ -226,6 +226,8 @@ def make_clusters(
     if not resume_clustering:
         with open(logging_file, 'w') as flog:
             print(dataset_desc, file=flog)
+    ## TODO: should I be saving sense sents at every step?
+    ## Otherwise this isn't saving anything
     else:
         all_sense_data = pd.read_pickle(f'{output_path}/target_sense_labels.pkl')
         skip_targets = all_sense_data.target.unique()

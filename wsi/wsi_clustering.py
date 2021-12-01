@@ -91,6 +91,9 @@ def perform_clustering(predictions, settings, method='average'):
     ## Hierarchical agglomerative clustering
     Z = linkage(dists, method=method, metric='cosine')
 
+    # plt.figure(figsize=(10,6))
+    # dn = dendrogram(Z, truncate_mode='lastp', p=15)
+
     cutoff = min(settings.max_number_senses, len(Z[:,2]))
     distance_crit = Z[-cutoff, 2]
     labels = fcluster(Z, distance_crit, 'distance') - 1

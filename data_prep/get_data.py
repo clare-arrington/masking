@@ -1,5 +1,4 @@
 #%%
-from ast import literal_eval
 from pathlib import Path
 from tqdm import tqdm
 import pandas as pd
@@ -27,7 +26,6 @@ def trim(old_sent, pre=True, cutoff=100):
 
     return new_sent
 
-
 ## TODO: fixing for date is bad; but leave it for now
 def preprocess_data(docs, corpus_name, path):
     nlp = spacy.load("en_core_web_sm")
@@ -36,10 +34,10 @@ def preprocess_data(docs, corpus_name, path):
     sent_id = 0
     processed = nlp.pipe(docs.content, batch_size=50, 
         n_process=1, disable=["ner", "textcat"])
-    for date, doc in tqdm(zip(docs.date, processed)):
+    for date, doc in tqdm(zip(docs.date, processed), total=len(docs)):
         ## TODO: this is unideal; not splitting on \n
         for sent in doc.sents:
-            ## TODO: fix for more than covid-19 I guess
+            ## TODO: fix for more than covid-19 
             p_sent = []
             for token in sent:
                 t = token.text.lower()
@@ -71,8 +69,10 @@ def pull_from_preprocessed_data(
     Path(save_path).mkdir(parents=True, exist_ok=True)
 
     data = pd.read_pickle(data_path)
-    data['processed_sentence'] = data['processed_sentence'].apply(literal_eval)
+    # data['processed_sentence'] = data['processed_sentence'].apply(literal_eval)
     print(f'\nAll Sents: {len(data):,}')
+    data.drop_duplicates(subset=['sentence'], inplace=True)
+    print(f'All Sents after duplicates removed: {len(data):,}')
 
     word_indices = {word:0 for word in targets}
     target_sent_ids = []
@@ -80,7 +80,7 @@ def pull_from_preprocessed_data(
     word_index_sents = []
     target_data = []
 
-    for sent_id, row in tqdm(data.iterrows()):
+    for sent_id, row in tqdm(data.iterrows(), total=len(data)):
         words = row.processed_sentence
         found_targets = set(targets).intersection(set(words))
         if found_targets == set():
@@ -112,7 +112,7 @@ def pull_from_preprocessed_data(
         word_index_sents.append(word_index_sent)
         target_sent_ids.append(sent_id)
 
-    print(f'Target Sents: {len(target_sent_ids):,}')
+    print(f'\nTarget Sents: {len(target_sent_ids):,}')
     sentence_data = data.loc[target_sent_ids]
     sentence_data['word_index_sentence'] = word_index_sents
     ## TODO: should drop preproc here
@@ -125,11 +125,11 @@ def pull_from_preprocessed_data(
     print('Non-target sents saved!\n')
 
     print(f'Targets found: {len(target_data)}')
-    print('\nTarget Counts')
     target_data = pd.DataFrame(target_data, columns=['word_index', 'target', 'formatted_sentence', 'length', 'sent_id'])
     target_data.to_pickle(f'{save_path}/target_information.pkl')
-    # print(target_data.target.value_counts())
     print('Target data saved!')
+    # print('\nTarget Counts')
+    # print(target_data.target.value_counts())
 
 def parse_sentences(
     corpora_path, non_target_path, corpus_name, 

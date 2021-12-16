@@ -2,6 +2,7 @@
 from get_data import preprocess_data, pull_from_preprocessed_data
 import pandas as pd
 
+#%%
 def make_time_slices(data, corpus_name, path):
     date_ranges = [ ('2020-01', '2020-03'),
                     ('2020-04', '2020-06'),
@@ -30,21 +31,25 @@ def pull_articles_from_database(main_path):
     data = data.join(labels, on='source').dropna()
     data.cluster = data.cluster.astype(int)
 
+    conspiracy = data[data.cluster == 0]
+    alternative = data[data.cluster == 1]
     mainstream = data[data.cluster == 2]
     mainstream = mainstream.drop(
         mainstream[mainstream.source.isin(['oann', 'foreignpolicy'])].index)
-    alternative = data[data.cluster == 1]
 
-    return mainstream, alternative
-
-main_path = '/data/arrinj/corpus_data/news'
-mainstream, alternative = pull_articles_from_database(main_path)
-
-## Generate full 
+    return conspiracy, alternative, mainstream
 
 def preprocess_full(data, corpus_name, path):
-    preprocess_data(data[['content', 'date']], corpus_name, 
-                f'{path}/{corpus_name}.pkl')       
+    preprocess_data(data, corpus_name, 
+                f'{path}/corpora/{corpus_name}.pkl')       
+
+main_path = '/data/arrinj/corpus_data/news'
+# conspiracy, alternative, mainstream = pull_articles_from_database(main_path)
+
+## Generate full 
+# preprocess_full(mainstream, 'mainstream', main_path)
+# preprocess_full(alternative, 'alternative', main_path)
+# preprocess_full(conspiracy, 'conspiracy', main_path)
 
 ## Generate time slices
 # main_path += '/corpora/time_slices'
@@ -81,10 +86,13 @@ generic_targets = [
 
 targets = covid_targets + generic_targets
 
-# for corpus_name in ['alternative', 'mainstream']:
-#     data_path = f'{main_path}/corpora/{corpus_name}.pkl'
-#     save_path = f'{main_path}/subset/{corpus_name}/'
-#     pull_from_preprocessed_data(data_path, save_path, targets)
+# , 
+for corpus_name in ['alternative', 'conspiracy', 'mainstream']:
+    print(f'Processing data for {corpus_name} news')
+    data_path = f'{main_path}/corpora/{corpus_name}.pkl'
+    save_path = f'{main_path}/subset/{corpus_name}/'
+    pull_from_preprocessed_data(data_path, save_path, targets)
+    print('\n\n')
 
     # for slice in range(0, 6):
     #     data_path = f'{main_path}/corpora/time_slices/{corpus_name}_slice_{slice}.csv'
@@ -93,3 +101,5 @@ targets = covid_targets + generic_targets
 
 print('All done!')
 # %%
+
+## maybe add as a script with one param

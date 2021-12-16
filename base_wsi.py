@@ -7,19 +7,34 @@ from datetime import datetime
 from dateutil import tz
 from pathlib import Path
 import pandas as pd
+from tqdm import tqdm
 from glob import glob
 import time
+
+# 
+def aggregate_data(path, file_name, range_max=6):
+    data = []
+    for slice_num in range(0,range_max):
+        slice_data = pd.read_pickle(f'{path}/slice_{slice_num}/{file_name}.pkl')
+        data.append(slice_data)
+
+    return pd.concat(data)
 
 ## sentence path is needed if corpus name is specified
 ## is there another use?
 # occurence limit - requires target to show up n times or its cut out
 # min length - requires sentence to be above length k, important for context window
-def get_data(target_path, sentence_path=None, corpus_name=None, 
-             occurence_limit=25, length_minimum=25):
-    if 'csv' in target_path:
-        target_data = pd.read_csv(target_path)
-    elif 'pkl' in target_path:
-        target_data = pd.read_pickle(target_path)
+def get_data(
+    target_path=None, target_data=None,
+    sentence_path=None, corpus_name=None, 
+    occurence_limit=25, length_minimum=25
+    ):
+    
+    if target_data is None:
+        if 'csv' in target_path:
+            target_data = pd.read_csv(target_path)
+        elif 'pkl' in target_path:
+            target_data = pd.read_pickle(target_path)
     
     print(f'{len(target_data):,} target instances pulled')
 
@@ -218,16 +233,18 @@ def make_clusters(
     settings = DEFAULT_PARAMS._asdict()
     settings = WSISettings(**settings)
 
-    Path(f'{output_path}/summaries').mkdir(parents=True, exist_ok=True)
-    Path(f'{output_path}/plots').mkdir(parents=True, exist_ok=True)
     logging_file = f'{output_path}/clustering.log'
+
+    Path(f'{output_path}/summaries').mkdir(parents=True, exist_ok=True)
+    if plot_clusters:
+        Path(f'{output_path}/plots').mkdir(parents=True, exist_ok=True)
 
     ## Start the new logging file for this run
     if not resume_clustering:
         with open(logging_file, 'w') as flog:
             print(dataset_desc, file=flog)
     ## TODO: should I be saving sense sents at every step?
-    ## Otherwise this isn't saving anything
+    ## Otherwise this isn't saving any data incrementally
     else:
         all_sense_data = pd.read_pickle(f'{output_path}/target_sense_labels.pkl')
         skip_targets = all_sense_data.target.unique()
@@ -315,27 +332,12 @@ def save_results(
             for index, (pre, targ, post) in cluster:
                 print(f'\t{index}', file=fout)
                 print(f'\t\t{pre} *{targ}* {post}\n', file=fout)
-
-def create_sense_sentences(sentence_path, output_path):
-    target_data = pd.read_pickle(
-        f'{output_path}/target_sense_labels.pkl')
-    print(f'{len(target_data):,} targets predicted')
-
+               
+def create_sense_sentences(sentence_path, output_path, target_data):
     targets = list(target_data.target.unique())
     print(f'{len(targets)} targets selected')
     ids = target_data.sent_id.unique()
-    print(f'{len(ids):,} unique sentences')
-
-    ## TODO: somehow there are terms that don't have a sent_id;
-    ## how did that even happen?
-    # good_target_data = pd.read_csv(target_path,
-    #     usecols=['word_index', 'sent_id'])
-    # good_target_data.set_index('word_index', inplace=True) ## maybe this default
-    
-    # target_data = target_data.join(good_target_data)
-    # target_data.dropna(inplace=True)
-    # target_data.sent_id = target_data.sent_id.astype(int)
-    # print(f'{len(target_data)} targets after nulls removed')
+    print(f'{len(ids):,} unique sentences with assigned senses')
 
     if 'csv' in sentence_path:
         sentence_data = pd.read_csv(sentence_path, usecols=['sent_id', 'word_index_sentence'])
@@ -347,6 +349,9 @@ def create_sense_sentences(sentence_path, output_path):
                             inplace=True)
 
     good_ids = sentence_data.index.intersection(ids)
+    print(f'{len(sentence_data):,} sentences loaded')
+    print(f'{len(good_ids):,} overlapping sentences')
+
     if len(good_ids) < len(ids):
         bad_ids = set(ids) - set(good_ids)
         print(f'Removing {len(bad_ids):,} sents from these targets:')
@@ -356,7 +361,7 @@ def create_sense_sentences(sentence_path, output_path):
 
     sense_sents = []
     num_bad = 0
-    for sent_id, row in sentence_data.iterrows():
+    for sent_id, row in tqdm(sentence_data.iterrows(), total=len(sentence_data)):
         sent = row['word_index_sentence']
 
         sense_sent = []
@@ -389,6 +394,26 @@ def create_sense_sentences(sentence_path, output_path):
     sense_data = pd.DataFrame(sense_sents, columns=['sent_id', 'sense_sentence'])
     sense_data.set_index('sent_id', inplace=True) 
 
+    Path(output_path).mkdir(parents=True, exist_ok=True)
     sense_data.to_pickle(f'{output_path}/sense_sentences.pkl')
 
+#%%
+## TODO: change name
+def sense_wrapper(sentence_path, output_path, slice_max=None):
+    if slice_max is None:
+        target_data = pd.read_pickle(
+            f'{output_path}/target_sense_labels.pkl')
+        print(f'{len(target_data):,} targets predicted')
+
+        create_sense_sentences(sentence_path, output_path, target_data)
+    else:
+        target_data = pd.read_pickle(
+            f'{output_path}/all/target_sense_labels.pkl')
+        print(f'{len(target_data):,} targets predicted')
+
+        for slice_num in range(0, slice_max):
+            s_path = f'{sentence_path}/slice_{slice_num}/target_sentences.pkl'
+            o_path = f'{output_path}/slice_{slice_num}'
+            print(f'\n==== Slice {slice_num} ====')
+            create_sense_sentences(s_path, o_path, target_data)
 # %%

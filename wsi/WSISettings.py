@@ -7,11 +7,15 @@ WSISettings = namedtuple('WSISettings', ['cuda_device', 'max_number_senses',
                                          ])
 
 DEFAULT_PARAMS = WSISettings(
+    ## Cutoff for the dendrogram based on last n merges
     max_number_senses=15,
-    min_sense_instances=50,
-    # sense clusters that dominate less than this number of samples
-    # would be remapped to their closest big sense
 
+    ## Sense clusters that dominate less than this number of samples
+    # would be remapped to their closest big sense
+    # 25 - 100 range is good, but can scale up depending on size of data
+    min_sense_instances=100,
+
+    ## General BERT settings
     cuda_device=0,
     disable_lemmatization=False,
     disable_tfidf=False,

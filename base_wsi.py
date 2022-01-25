@@ -20,14 +20,15 @@ def aggregate_data(path, file_name, range_max=6):
 
     return pd.concat(data)
 
-## sentence path is needed if corpus name is specified
-## is there another use?
-# occurence limit - requires target to show up n times or its cut out
+# TODO: I added corpus name to the target data; rerun for other datasets
+# base_count - requires target to show up n times or its cut out
 # min length - requires sentence to be above length k, important for context window
+# occurence limit - this flag makes it so that one sentence doesn't have too many targets in it
+# TODO: occurence limit could be handled better if you only remove sentences with targets that are very common
+
 def get_data(
-    target_path=None, target_data=None,
-    sentence_path=None, corpus_name=None, 
-    occurence_limit=25, length_minimum=25
+    target_path=None, target_data=None, corpus_name=None, 
+    occurence_limit=10, minimum_length=25, base_count=25
     ):
     
     if target_data is None:
@@ -38,34 +39,18 @@ def get_data(
     
     print(f'{len(target_data):,} target instances pulled')
 
-    if sentence_path:
-        if 'csv' in sentence_path:
-            sentence_data = pd.read_csv(sentence_path, usecols=['corpus', 'sent_id'])
-            sentence_data.set_index(['sent_id'], inplace=True)
-        elif 'pkl' in sentence_path:
-            sentence_data = pd.read_pickle(sentence_path)
-            sentence_data.drop(columns=['sentence', 'word_index_sentence'], inplace=True)
-        target_data = target_data.join(sentence_data, on='sent_id')
+    if corpus_name is not None:
+        target_data = target_data[target_data.corpus == corpus_name]
+        print(f'{len(target_data):,} instances within {corpus_name}')
 
-        if corpus_name is not None:
-            target_data = target_data[target_data.corpus == corpus_name]
-            print(f'{len(target_data):,} instances within {corpus_name}')
-
-    ## TODO: does this need to happen twice?
     vc = target_data.target.value_counts()
     og_vc = len(vc)
-    print(f'{og_vc} targets before anything removed')
+    print(f'=== {og_vc} targets before anything removed ===')
 
-    targets = vc[vc >= 25].index
-    target_data = target_data[target_data.target.isin(targets)]
-    new_vc = target_data.target.value_counts()
-    print(f'{og_vc - len(new_vc)} targets removed')
-    print(f'{len(target_data):,} instances after insufficient targets removed')
-
-    if length_minimum:
+    if minimum_length:
         ids = target_data[target_data.length <= 25].sent_id.unique()
         target_data = target_data[~target_data.sent_id.isin(ids)]
-        print(f'{len(target_data):,} after {length_minimum} length minimum applied')
+        print(f'{len(target_data):,} instances after {minimum_length} length minimum applied')
 
     if occurence_limit:
         vc = target_data.sent_id.value_counts()
@@ -73,7 +58,12 @@ def get_data(
         target_data = target_data[target_data.sent_id.isin(ids)]
         print(f'{len(target_data):,} after {occurence_limit} occurence limit applied')
 
-    # target_data.formatted_sentence = target_data.formatted_sentence.apply(literal_eval)
+    vc = target_data.target.value_counts()
+    targets = vc[vc >= base_count].index
+    target_data = target_data[target_data.target.isin(targets)]
+    new_vc = len(vc)
+    print(f'{len(target_data):,} after insufficient targets removed')
+    print(f'=== {new_vc} targets left after filtering; {og_vc - new_vc} were removed ===')
 
     return target_data
 

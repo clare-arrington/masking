@@ -7,8 +7,7 @@ import pickle
 import re
 
 ## Trim the sentence around a term, either the section before or after
-## Same approach for both, just differently added
-## Might be a slicker way to do this
+## Similar approach for both, just differently added
 def trim(old_sent, pre=True, cutoff=100):
     new_sent = ''
     words = old_sent.split()
@@ -183,7 +182,7 @@ def parse_sentences(
             formatted_sent = (pre, just_target, post)
             length = len(pre) + len(post)
 
-            target_info = [word_index, just_target, formatted_sent, length, sent_id]
+            target_info = [word_index, just_target, formatted_sent, length, sent_id, corpus_name]
             target_data.append(target_info)
 
             word_index_sent.append(word_index)
@@ -206,6 +205,8 @@ def pull_target_data(
     subset_path, pattern=r'[a-z]+'): 
     
     ## Setup 
+    ## We keep all target information together regardless of the number of corpura, 
+    # so word indices are completely unique
     all_targets = [target for targets in corpus_targets.values() for target in targets]
     word_indices = {word:0 for word in set(all_targets)}
     sent_id_shift = 0
@@ -226,7 +227,7 @@ def pull_target_data(
         target_data.extend(t_data)
 
     ## Convert to dataframes
-    target_data = pd.DataFrame(target_data, columns=['word_index', 'target', 'formatted_sentence', 'length', 'sent_id'])
+    target_data = pd.DataFrame(target_data, columns=['word_index', 'target', 'formatted_sentence', 'length', 'sent_id', 'corpus'])
     sentence_data = pd.DataFrame(sentence_data, columns=['sent_id', 'corpus', 'sentence', 'word_index_sentence'])
 
     print('\nTarget Counts')

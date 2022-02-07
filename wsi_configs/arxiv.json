@@ -1,0 +1,9 @@
+{   "dataset_name": "arxiv",
+    "corpora_desc": {
+        "ai"    :  "ArXiv - Artificial Intelligence",
+        "phys"  :  "ArXiv - Classical Physics",
+        "both"  :  "ArXiv - AI and Physics"
+    },
+    "base_count" : 50,
+    "subset_num" : 15000
+}

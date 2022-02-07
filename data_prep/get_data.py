@@ -239,7 +239,7 @@ def pull_target_data(
 def save_data(sentence_data, target_data, output_path):
     sentence_data.set_index('sent_id', inplace=True)
     sentence_data.to_pickle(f'{output_path}/target_sentences.pkl')
-    print('\Sentence data saved!')
+    print('\nSentence data saved!')
 
     target_data.set_index('word_index', inplace=True)
     target_data.to_pickle(f'{output_path}/target_information.pkl')

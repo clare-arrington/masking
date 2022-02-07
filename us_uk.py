@@ -1,5 +1,6 @@
 #%%
-from base_wsi import get_data, make_predictions, make_clusters, sense_wrapper 
+from base_wsi import get_data, make_predictions, make_clusters
+from sentence_maker import create_sense_sentences 
 
 def prep_targets(target_data, corpus_name):
 
@@ -63,7 +64,7 @@ make_clusters(
     dataset_desc, output_path)
 
 # %%
-sense_wrapper(sentence_path, output_path)
+create_sense_sentences(sentence_path, output_path)
 
 print('Done!')
 

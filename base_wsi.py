@@ -2,7 +2,7 @@
 from wsi.lm_bert import LMBert, trim_predictions
 from wsi.WSISettings import DEFAULT_PARAMS, WSISettings
 from wsi.wsi_clustering import cluster_predictions, find_best_sents, get_cluster_centers
-from typing import List
+from typing import List, Dict
 from datetime import datetime
 from dateutil import tz
 from pathlib import Path
@@ -146,11 +146,11 @@ def record_time(desc):
     return t_str
 
 def make_predictions(
-    target_data: pd.DataFrame,
+    # target_data: pd.DataFrame,
+    target_rows: Dict[str, pd.DataFrame],
     targets: List[str],
     dataset_desc: str,
     output_path: str,
-    subset_num=None,
     resume_predicting=False
     ):
 
@@ -167,7 +167,7 @@ def make_predictions(
     if not resume_predicting:
         with open(logging_file, 'w') as flog:
             print(dataset_desc, file=flog)
-            print(f'\n{len(target_data):,} rows loaded', file=flog)
+            # print(f'\n{len(target_data):,} rows loaded', file=flog)
             print(f'{len(targets)} targets loaded\n', file=flog)
     else:
         already_predicted = glob(f'{output_path}/predictions/*.pkl')
@@ -183,9 +183,6 @@ def make_predictions(
         for target in remove_targets:
             targets.remove(target)
         print(f'{len(targets)} targets going to be clustered')
-
-    print(f'\nPulling target rows for prediction')
-    target_rows = pull_rows(target_data.reset_index(), subset_num)
 
     for n, target_alts in enumerate(sorted(targets)):
         # break
@@ -266,7 +263,7 @@ def make_clusters(
             if len(target_alts) > 1:
                 print(f'Alt form: {target_alts[1]}', file=flog)
 
-            if len(predictions) >= 100:
+            if len(predictions) >= 150:
                 # print('\n\tClustering likelihoods...')            
                 print('\n' + record_time('start'), file=flog)
                 sense_clusters, cluster_centers = cluster_predictions(

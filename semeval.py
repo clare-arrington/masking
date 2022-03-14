@@ -36,8 +36,8 @@ make_clusters(
     target_data, targets, 
     dataset_desc, output_path, plot_clusters=True)
 
-print('Done!')
 # %%
 create_sense_sentences(sentence_path, output_path)
 
+print('Done!')
 # %%

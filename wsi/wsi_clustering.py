@@ -94,11 +94,11 @@ def perform_clustering(predictions, settings, method='average'):
     # plt.figure(figsize=(10,6))
     # dn = dendrogram(Z, truncate_mode='lastp', p=15)
 
-    cutoff = min(settings.max_number_senses, len(Z[:,2]))
+    cutoff = min(settings.init_num_senses, len(Z[:,2]))
     distance_crit = Z[-cutoff, 2]
     labels = fcluster(Z, distance_crit, 'distance') - 1
 
-    return labels, None
+    return labels
 
 def get_cluster_centers(data, n_senses, sense_clusters=None):
     cluster_centers = np.zeros((n_senses, data.shape[1]))
@@ -110,13 +110,22 @@ def get_cluster_centers(data, n_senses, sense_clusters=None):
     return cluster_centers
 
 #%%
-def cluster_predictions(predictions, target_alts, settings, plot_clusters, plot_path=None):
-    labels, cluster_centers = perform_clustering(predictions, settings)
+def cluster_predictions(
+    predictions, target_alts, settings, 
+    min_sense_size, plot_clusters, print_clusters, save_path=None):
+    labels = perform_clustering(predictions, settings)
     n_senses = np.max(labels) + 1
 
-    if plot_clusters:
-        init_path = f'{plot_path}/{target_alts[0]}_initial_clusters.html'
-        plot_clustered_preds(predictions, labels, target_alts, init_path)
+    if save_path:
+        if plot_clusters:
+            init_path = f'{save_path}/plots/{target_alts[0]}_initial_clusters.html'
+            plot_clustered_preds(predictions, labels, 
+                                target_alts, init_path)  
+        if print_clusters:
+            init_path = f'{save_path}/info/{target_alts[0]}_initial_clusters.txt'
+            with open(init_path, 'w') as f:
+                for label, count in Counter(labels).items():
+                    print(f'{label}: {count}', file=f)
 
     ## Count cluster sizes by instances
     sense_clusters = defaultdict(list)  
@@ -124,21 +133,26 @@ def cluster_predictions(predictions, target_alts, settings, plot_clusters, plot_
         sense_clusters[label].append(inst_id)
 
     ## Find center (median) of sense clusters
-    cluster_centers = get_cluster_centers(predictions, n_senses, sense_clusters)
+    cluster_centers = get_cluster_centers(
+        predictions, n_senses, sense_clusters)
 
     ## Sets might have many small clusters instead of any big
     ## So we can iteratively get big
     ## TODO: could fix this loop up a bit
-    big_senses = [label for label, count in Counter(labels).items() if count >= settings.min_sense_instances]
+    big_senses = [label for label, count in Counter(labels).items() 
+                    if count >= min_sense_size]
     
     ## If nobody is big enough, we create one or more seed clusters 
     min_instances = 10
     if len(big_senses) == 0:
-        big_senses = [label for label, count in Counter(labels).items() if count >= min_instances]
+        big_senses = [label for label, count in Counter(labels).items()
+                         if count >= min_instances]
         
-    ## Remap senses if they aren't all big
-    while (len(big_senses) != n_senses or min_instances <= 50): 
+    ## Remap senses if they aren't all big or TODO: ??
+    while (len(big_senses) != n_senses or 
+            min_instances <= min_sense_size): 
         
+        ## 2 left but they aren't both big enough, so they'll get merged to 1
         if n_senses == 2:
             big_senses = [0]
 
@@ -158,20 +172,23 @@ def cluster_predictions(predictions, target_alts, settings, plot_clusters, plot_
 
         sense_clusters = remap_senses(sense_remapping, sense_clusters)
         n_senses = len(sense_clusters)
-        cluster_centers = get_cluster_centers(predictions, n_senses, sense_clusters)
+        cluster_centers = get_cluster_centers(
+            predictions, n_senses, sense_clusters)
+        print(cluster_centers.shape)
         
         ## 
         if n_senses == 1:
             break
         else:
             min_instances += 10
-            big_senses = [sense for sense, cluster in sense_clusters.items() if len(cluster) >= min_instances]
+            big_senses = [sense for sense, cluster in sense_clusters.items() 
+                            if len(cluster) >= min_instances]
 
-    if plot_clusters:
+    if plot_clusters and save_path:
         labels = { sent_id:clust for clust, sents in sense_clusters.items() 
                             for sent_id in sents}
 
-        final_path = f'{plot_path}/{target_alts[0]}_final_clusters.html'
+        final_path = f'{save_path}/{target_alts[0]}_final_clusters.html'
         plot_clustered_preds(predictions, labels, target_alts, final_path)
 
     return sense_clusters, cluster_centers  
@@ -187,5 +204,7 @@ def find_best_sents(target_data, predictions, cluster_centers, sense_clusters):
                                 index=preds.index)
         central = dist_df.nsmallest(25, columns=['dist'])
         data_rows = target_data.loc[central.index]
-        best_sents[sense] = data_rows.formatted_sentence.iteritems()
+        best_sents[sense] = data_rows.formatted_sent.iteritems()
     return best_sents
+
+# %%

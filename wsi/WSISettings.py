@@ -1,25 +1,35 @@
 from collections import namedtuple
+ModelInfo = namedtuple('ModelInfo', ['name', 'language', 'vocab_size'])
 
-WSISettings = namedtuple('WSISettings', ['cuda_device', 'max_number_senses',
-                                         'disable_tfidf', 'disable_lemmatization', 
-                                         'min_sense_instances', 'bert_model',
-                                         'max_batch_size', 'prediction_cutoff' 
-                                         ])
+models = {
+    'bert' : ModelInfo(
+        'bert-base-uncased', 
+        'english', 30522
+        ),
+    'beto' : ModelInfo(
+        'dccuchile/bert-base-spanish-wwm-uncased',
+        'spanish', 31002
+        )
+}
+
+## Swap this for a different model
+model = models['bert']
+
+WSISettings = namedtuple('WSISettings', [
+    'cuda_device', 'init_num_senses',
+    'disable_tfidf', 'disable_lemmatization', 
+    'bert_model', 'language',
+    'max_batch_size', 'prediction_cutoff' ])
 
 DEFAULT_PARAMS = WSISettings(
     ## Cutoff for the dendrogram based on last n merges
-    max_number_senses=15,
-
-    ## Sense clusters that dominate less than this number of samples
-    # would be remapped to their closest big sense
-    # 25 - 100 range is good, but can scale up depending on size of data
-    min_sense_instances=100,
-
+    init_num_senses=15,
     ## General BERT settings
-    cuda_device=0,
-    disable_lemmatization=False,
+    cuda_device=1,
+    disable_lemmatization=True,
     disable_tfidf=False,
-    max_batch_size=10,
-    prediction_cutoff=30522,
-    bert_model='bert-base-uncased'
+    max_batch_size=32,
+    language=model['language'],
+    prediction_cutoff=model['vocab_size'],
+    bert_model=model['name']
 )

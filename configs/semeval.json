@@ -1,0 +1,15 @@
+{   "dataset_name": "semeval",
+    "dataset_desc" : "SemEval 2020 Task \n1800s (ccoha1) and 2000s (ccoha2)",
+    "corpora_data": {
+        "1800s" : 
+          [ "SemEval 2020 Task \nCCOHA 1: 1810 - 1860",
+            "pos_targets.txt"],
+        "2000s" : 
+          [ "SemEval 2020 Task \nCCOHA 2: 1960 - 2010",
+            "pos_targets.txt"]
+    },
+    "min_sense_size" : 25,
+    "min_length"    : 30,
+    "occurence_lim" : 10,
+    "subset_num"    : 15000
+}

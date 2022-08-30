@@ -1,0 +1,16 @@
+{   
+  "dataset_name": "us_uk",
+  "corpora_desc": {
+    "bnc" : "UK Corpus",
+    "coca" : "US Corpus",
+    "both"  :  "Both US and UK Corpora"
+  },
+  "corpora_targets": {
+    "bnc" : "uk_targets.txt",
+    "coca": "us_targets.txt"
+  },
+  "base_count"    : 200,
+  "min_length"    : 50,
+  "occurence_lim" : 5,
+  "subset_num"    : 12500
+}

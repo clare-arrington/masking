@@ -1,0 +1,17 @@
+{   
+    "dataset_name": "spanish",
+    "dataset_desc" : "Diachronic Spanish Corpora",
+    "corpus_name" : "both",
+    "corpora_data": {
+      "old" : [
+        "Old Spanish Corpus",
+        "targets.txt"],
+      "modern" : [
+        "Modern Spanish Corpus",
+        "targets.txt"]
+    },
+    "min_sense_size" : 5,
+    "min_length"     : 30,
+    "occurence_lim"  : 10,
+    "subset_num"     : 15000
+  }

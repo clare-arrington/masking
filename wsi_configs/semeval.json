@@ -1,9 +1,0 @@
-{   "dataset_name": "semeval",
-    "corpora_desc": {
-        "1800s" : "SemEval 2020 Task \nCCOHA 1: 1810 - 1860",
-        "2000s" : "SemEval 2020 Task \nCCOHA 1: 1810 - 1860",
-        "both"  :  "SemEval 2020 Task \n1800s (ccoha1) and 2000s (ccoha2)"
-    },
-    "base_count" : 50,
-    "subset_num" : 15000
-}

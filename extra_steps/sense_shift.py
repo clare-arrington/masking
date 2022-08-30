@@ -1,6 +1,8 @@
 #%%
 import pandas as pd
 
+## Calculate sense shift at this step of the process
+
 sentence_path = '/home/clare/Data/corpus_data/semeval/subset/target_sentences.csv'
 sentence_data = pd.read_csv(sentence_path)
 sentence_data.set_index('sent_id', inplace=True) 

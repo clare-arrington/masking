@@ -1,7 +1,6 @@
 {   
     "dataset_name": "spanish",
     "dataset_desc" : "Diachronic Spanish Corpora",
-    "corpus_name" : "both",
     "corpora_data": {
       "old" : [
         "Old Spanish Corpus",

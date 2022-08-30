@@ -1,7 +1,6 @@
 {   
   "dataset_name": "coha",
   "dataset_desc" : "COHA 1910-2000",
-  "corpus_name" : "all",
   "corpora_data": {
       "1910" : 
       [ "1910",

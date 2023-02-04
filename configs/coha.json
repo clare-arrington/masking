@@ -35,6 +35,5 @@
   },
   "min_sense_size" : 50,
   "min_length"    : 30,
-  "occurence_lim" : 10,
-  "subset_num"    : 15000
+  "occurence_lim" : 10
 }

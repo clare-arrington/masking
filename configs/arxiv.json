@@ -4,6 +4,5 @@
         "phys"  :  "ArXiv - Classical Physics",
         "both"  :  "ArXiv - AI and Physics"
     },
-    "base_count" : 50,
-    "subset_num" : 15000
+    "base_count" : 50
 }

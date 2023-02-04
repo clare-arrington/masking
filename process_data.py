@@ -1,37 +1,38 @@
 import pandas as pd
 
-# min_count - requires target to show up n times or its cut out
-# min length - requires sentence to be above length k, important for context window
-# occurence limit - this flag makes it so that one sentence doesn't have too many targets in it
+# min_count - requires target to show up n times; not worth clustering otherwise
+# min length - requires sentence to be above length k; important for context window
+# occurence limit - remove sentences with too many targets in them
 
+## Get rid of undesired targets and sentences from all selected corpora (1 or more)
 def filter_target_data(
     target_paths,
     targets=None,
     min_count=50,
     min_length=25, 
     occurence_limit=10, 
-    subset_num=12500
+    subset_num=100000
     ):
     
     all_data = []
+    ### Do some initial filtering before combining ###
     for corpus, path in target_paths.items():
       data = pd.read_pickle(path)
       print(f'= {len(data):,} rows pulled for {corpus} =')
 
-      ## Do some initial filtering before combining
+      ## Filter out non-target rows
       if targets is not None:
           data = data[data.target.isin(targets)]
           print(f'\n{len(data):,} target instances after targets selected')
 
-      ## Apply minimum length
+      ## Apply minimum length filter
       len_data = data[data.length >= min_length]
       ids = len_data.sent_idx.unique()
-
       data = data[data.sent_idx.isin(ids)]
       print(f'{len(data):,} instances after {min_length} length minimum applied')
       del ids
 
-      ## Apply occurence limit
+      ## Apply occurence limit filter
       index_vc = data.sent_idx.value_counts()
       ids = index_vc[index_vc <= occurence_limit].index
       data = data[data.sent_idx.isin(ids)]
@@ -39,6 +40,7 @@ def filter_target_data(
 
       all_data.append(data)
 
+    ## Convert list to merged data frame
     data = pd.concat(all_data)
     del all_data
     print(f'{len(data):,} target instances pulled')
@@ -46,7 +48,8 @@ def filter_target_data(
     og_vc = len(data.target.unique())
     print(f'\n== {og_vc} targets before anything else removed ==')
 
-    ## Subset data
+    ## TODO: Just remove this?
+    ## Apply general subset to data
     vc = data.target.value_counts()
     too_many = vc[vc > subset_num]
     for target in too_many.index:
@@ -61,7 +64,7 @@ def filter_target_data(
         data = data[~data.sent_idx.isin(bigger_rows.index)]
     print(f'{len(data):,} after {subset_num} max applied')
 
-    ## Apply minimum count
+    ## Apply minimum count filter
     vc = data.target.value_counts()
     targets = vc[vc >= min_count].index
     data = data[data.target.isin(targets)]

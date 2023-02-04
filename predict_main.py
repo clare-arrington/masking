@@ -7,6 +7,8 @@ import pandas as pd
 from glob import glob
 import pickle
 
+## Main file for MLM prediction, called from run_wsi_config
+
 def make_predictions(
     target_data: pd.DataFrame,
     targets: List[str],
@@ -19,7 +21,7 @@ def make_predictions(
     settings = DEFAULT_PARAMS._asdict()
     settings = WSISettings(**settings)
 
-    ## Load base BERT model
+    ## Load BERT model
     lm = LMBert(settings)
 
     if embed_sents:

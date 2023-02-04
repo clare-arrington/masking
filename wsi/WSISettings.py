@@ -16,7 +16,7 @@ models = {
 model = models['bert']
 
 WSISettings = namedtuple('WSISettings', [
-    'cuda_device', 'init_num_senses',
+    'cuda_device', 'init_num_senses', 'subset_num',
     'disable_tfidf', 'disable_lemmatization', 
     'bert_model', 'language',
     'max_batch_size', 'prediction_cutoff' ])
@@ -24,12 +24,14 @@ WSISettings = namedtuple('WSISettings', [
 DEFAULT_PARAMS = WSISettings(
     ## Cutoff for the dendrogram based on last n merges
     init_num_senses=15,
-    ## General BERT settings
+    ## Number of term instances that will be used for clustering
+    subset_num=10000,
     cuda_device=1,
+    ## BERT settings
     disable_lemmatization=True,
     disable_tfidf=False,
     max_batch_size=32,
-    language=model['language'],
-    prediction_cutoff=model['vocab_size'],
-    bert_model=model['name']
+    language=model.language,
+    prediction_cutoff=model.vocab_size,
+    bert_model=model.name
 )

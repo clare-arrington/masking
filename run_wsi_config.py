@@ -1,22 +1,29 @@
 #%%
 from process_data import filter_target_data
-from base_wsi import make_predictions, make_clusters
+from predict_main import make_predictions
+from cluster_main import make_clusters
 from sentence_maker import create_sense_sentences
 from dotenv import dotenv_values
 import json
 
-## Set these
-dataset_name = 'semeval'
-run_every_corpora = True
-combine_corpora = False
-selected_corpus = None
-embed=False
-generate_new_predictions = True
+### This is the main file for the masking portion
 
-##
+CLUSTER_OPTIONS = [
+    'all_together', # merge sentences from all corpora, then do WSI
+    'all_separate', # perform WSI for each corpus independently
+    'single_corpus' # perform WSI for one corpus, designated by 'selected_corpus'
+    ]
+
+## Set these
+cluster_option = CLUSTER_OPTIONS[1]
+generate_new_predictions = True
+dataset_name = 'semeval'
+selected_corpus = None
+embed = False
+
+## 
 def prep_corpus_info(input_path, config, corpus_name):
     dataset_desc, target_file = config['corpora_data'][corpus_name]
-
     target_path = f"{input_path}/targets/{target_file}"
     with open(target_path, 'r') as f:
         og_targets = f.read().split()
@@ -48,18 +55,18 @@ def prep_info_together(input_path, config):
 data_path = dotenv_values(".env")['data_path']
 input_path = f"{data_path}/corpus_data/{dataset_name}"
 output_path = f"{data_path}/masking_results/{dataset_name}/"
-with open(f"wsi_configs/{dataset_name}.json", "r") as read_file:
+with open(f"configs/{dataset_name}.json", "r") as read_file:
     config = json.load(read_file)
 
 #%%
-## Get corpus info based on settings
-if run_every_corpora:
+## Get corpus info based on WSI setting (grouped, solo, etc)
+if cluster_option == 'all_together':
+    corpora_info = [prep_info_together(input_path, config)]
+elif cluster_option == 'all_separate':
     corpora = config['corpora_data']
     corpora_info = [prep_corpus_info(input_path, config, corpus) for corpus in corpora]
-elif combine_corpora:
-    corpora_info = prep_info_together(input_path, config)
-elif selected_corpus:
-    corpora_info = prep_corpus_info(input_path, config, selected_corpus)
+elif cluster_option == 'single_corpus' and selected_corpus in config['corpora_data']:
+    corpora_info = [prep_corpus_info(input_path, config, selected_corpus)]
 else:
     print('Nothing set for WSI')
     exit()
@@ -67,28 +74,29 @@ else:
 for corpus_info in corpora_info:
     print('Loading data')
     corpus_name, dataset_desc, target_paths, og_targets = corpus_info
-    output_path = f"{data_path}/masking_results/{dataset_name}/{corpus_name}"
+    save_path = f"{output_path}/{corpus_name}"
+    print(save_path)
 
     # TODO: get alt targets for US / UK
-    # TODO: when I drop extras, I should do so with respect to the different sections?
+    # og_targets = [
+    #     'face_nn','head_nn', 'land_nn', 'part_nn', 'record_nn', 'tree_nn', 'word_nn']
     target_data = filter_target_data(
         target_paths, og_targets, 
         config['min_sense_size'], 
         config['min_length'], 
-        config['occurence_lim'], 
-        config['subset_num'])
+        config['occurence_lim'])
 
     if dataset_name == 'semeval':
-        targets = [[t, t[:-3]] for t in og_targets]
+        targets = [[t, t[:-3]] for t in og_targets] 
+        ## need to trim off POS label for BERT, could load these targets
     else:
         targets = target_data.target.unique()
         targets = [[t] for t in targets]
 #%%
-    ## TODO: predict on all instead of subset
     if generate_new_predictions:
         make_predictions(
             target_data.reset_index(), targets.copy(),
-            dataset_desc, output_path, embed_sents=embed)
+            dataset_desc, save_path, embed_sents=embed)
         print('Predicting done!')
     else:
         print('Skipping prediction step')
@@ -97,7 +105,7 @@ for corpus_info in corpora_info:
     make_clusters(
         target_data, targets, dataset_desc, 
         config['min_sense_size'],
-        output_path, embed_sents=embed, 
+        save_path, embed_sents=embed, 
         print_clusters=True)
     print('Clustering done!')
 ##%%
@@ -111,7 +119,7 @@ for corpus_info in corpora_info:
     for corpus_name in corpora:
         subset_path = f"{input_path}/subset/{corpus_name}_indexed"
         sentence_path = f"{subset_path}_sentences.pkl"
-        create_sense_sentences(sentence_path, output_path, corpus_name)
+        create_sense_sentences(sentence_path, save_path, corpus_name)
 
 print("Done!")
 # %%

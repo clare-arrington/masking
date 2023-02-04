@@ -116,7 +116,6 @@ class LMBert():
                 self.lemmatized_vocab.append(lemma)
                 self.original_vocab.append(spacyed[0].lower_)
 
-
     def format_sentence_to_pattern(self, pre, target, post, pattern):
         replacements = dict(pre=pre, target=target, post=post)
         for predicted_token in ['{mask_predict}', '{target_predict}']:
@@ -149,9 +148,10 @@ class LMBert():
             inst_ids = []
             predictions = []
 
-            for batch in get_batches(sorted_by_len.iterrows(),
-                                     self.max_batch_size // n_patterns):
-
+            batch_generator = get_batches(sorted_by_len.iterrows(),
+                            self.max_batch_size // n_patterns)
+            # breakpoint()
+            for batch in tqdm(batch_generator, total=len(data_subset) // self.max_batch_size):
                 # Converts the sentences to BERT format
                 # Num patterns x num sentences
                 batch_sents = []
@@ -214,7 +214,7 @@ class LMBert():
                     predictions.append({idx : prob for idx, prob in zip(topk_idxs, probs)})
 
         predictions = pd.DataFrame(data=predictions, index=inst_ids)
-        predictions.head()
+        # predictions.head()
 
         ## Reorder and rename columns
         predictions = predictions[range(num_predictions)]

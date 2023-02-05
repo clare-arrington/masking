@@ -85,7 +85,7 @@ def plot_clustered_preds(preds, labels, target_alts, path):
     fig.write_html(path)
 
 def perform_clustering(predictions, settings, method='average'):
-    ## Pairwise distances; going with cosine 
+    ## Pairwise distances
     dists = pdist(predictions, metric='cosine')
 
     ## Hierarchical agglomerative clustering
@@ -116,6 +116,7 @@ def cluster_predictions(
     labels = perform_clustering(predictions, settings)
     n_senses = np.max(labels) + 1
 
+    ## Export information about the starting cluster formation
     if save_path:
         if plot_clusters:
             init_path = f'{save_path}/plots/{target_alts[0]}_initial_clusters.html'
@@ -131,6 +132,8 @@ def cluster_predictions(
     sense_clusters = defaultdict(list)  
     for inst_id, label in zip(predictions.index, labels):
         sense_clusters[label].append(inst_id)
+    for i in range(15):
+        print(i, ':', len(sense_clusters[i]))
 
     ## Find center (median) of sense clusters
     cluster_centers = get_cluster_centers(
@@ -139,20 +142,22 @@ def cluster_predictions(
     ## Sets might have many small clusters instead of any big
     ## So we can iteratively get big
     ## TODO: could fix this loop up a bit
+    min_instances = 5  
     big_senses = [label for label, count in Counter(labels).items() 
-                    if count >= min_sense_size]
-    
-    ## If nobody is big enough, we create one or more seed clusters 
-    min_instances = 10
-    if len(big_senses) == 0:
-        big_senses = [label for label, count in Counter(labels).items()
-                         if count >= min_instances]
+                    if count >= min_instances]    
         
-    ## Remap senses if they aren't all big or TODO: ??
-    while (len(big_senses) != n_senses or 
-            min_instances <= min_sense_size): 
-        
+    ## Remap senses if:
+    # - they aren't all big 
+    # - or the true minimum size hasn't been hit yet
+    while (len(big_senses) != n_senses or  
+            min_instances < min_sense_size): 
+        print('\nbig:', big_senses)
+        print(len(big_senses), 'big ?=', n_senses, 'total')
+        print(min_instances, 'min. instances')
+        # breakpoint()
+
         ## 2 left but they aren't both big enough, so they'll get merged to 1
+        ## TODO: are things getting merged when they shouldn't?
         if n_senses == 2:
             big_senses = [0]
 
@@ -160,6 +165,7 @@ def cluster_predictions(
         closest_senses = np.argsort(dists, )[:, ]
 
         ## Determine closest sense and set remapping if not big
+        ## TODO: don't love that this only merges to large :/
         sense_remapping = {}
         for sense_idx in range(n_senses):
             for closest_sense in closest_senses[sense_idx]:
@@ -167,8 +173,8 @@ def cluster_predictions(
                     sense_remapping[sense_idx] = closest_sense
                     break
 
-        # print(n_senses, big_senses)
-        # print(sense_remapping)
+        # print('mapping => ', sense_remapping)
+        print('=============\n')
 
         sense_clusters = remap_senses(sense_remapping, sense_clusters)
         n_senses = len(sense_clusters)
@@ -180,9 +186,13 @@ def cluster_predictions(
         if n_senses == 1:
             break
         else:
-            min_instances += 10
-            big_senses = [sense for sense, cluster in sense_clusters.items() 
-                            if len(cluster) >= min_instances]
+            ## Bump up min_instances but don't go over the actual set param
+            min_instances = min(min_sense_size, min_instances + 10)
+            big_senses = []
+            for sense, cluster in sense_clusters.items():
+                print(sense, ':', len(cluster))
+                if len(cluster) >= min_instances:
+                    big_senses.append(sense)
 
     if plot_clusters and save_path:
         labels = { sent_id:clust for clust, sents in sense_clusters.items() 
@@ -206,5 +216,13 @@ def find_best_sents(target_data, predictions, cluster_centers, sense_clusters):
         data_rows = target_data.loc[central.index]
         best_sents[sense] = data_rows.formatted_sent.iteritems()
     return best_sents
+
+def map_other_instances(other_preds, cluster_centers, sense_clusters):
+    dists = cdist(cluster_centers, other_preds, metric='cosine')
+    closest_senses = dists.T.argmin(axis=1)
+    for sense in sense_clusters.keys():
+        rows = other_preds.loc[closest_senses == sense]
+        sense_clusters[sense].extend(rows.index)
+    return sense_clusters
 
 # %%

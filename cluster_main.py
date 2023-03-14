@@ -1,6 +1,6 @@
 from wsi.lm_bert import trim_predictions
 from wsi.WSISettings import DEFAULT_PARAMS, WSISettings
-from wsi.wsi_clustering import cluster_predictions, find_best_sents, get_cluster_centers
+from wsi.wsi_clustering import cluster_predictions, find_best_sents, get_cluster_centers, map_other_instances
 from log import record_time
 from typing import List
 from pathlib import Path
@@ -59,8 +59,7 @@ def make_clusters(
     dataset_desc: str,
     min_sense_size: int,
     output_path: str,
-    embed_sents=False,
-    method='flat',
+    embedded_sents=False,
     resume_clustering: bool = False,
     plot_clusters: bool = False,
     print_clusters: bool = False
@@ -77,41 +76,54 @@ def make_clusters(
         print(f'\n{n+1} / {len(targets)} : {" ".join(target_alts)}')
 
         ### Get vectors
-        if embed_sents:
+        if embedded_sents:
             with open(f'{output_path}/vectors/{target}.pkl', 'rb') as vp:
-                predictions = pickle.load(vp)
-                predictions = pd.DataFrame.from_dict(predictions).T
+                pred_vectors = pickle.load(vp)
+                pred_vectors = pd.DataFrame.from_dict(pred_vectors).T
         else:
-            predictions = pd.read_pickle(f'{output_path}/predictions/{target}.pkl')
+            pred_vectors = pd.read_pickle(f'{output_path}/predictions/{target}.pkl')
             # print(f'\tPredictions loaded')
-            subset = trim_predictions(predictions, target_alts, settings.language)
-            predictions = predictions[subset]
+            subset_term_ids = trim_predictions(pred_vectors, target_alts, settings.language)
+            pred_vectors = pred_vectors[subset_term_ids]
 
-        ### Do clustering
-        use_clustering = len(predictions) >= (min_sense_size * 2) + 25
+        ### Clustering step ###
+        ## Determine what needs to be done based on number of sentences and settings
+        use_clustering = len(pred_vectors) >= (min_sense_size * 2) + 25
+        use_subset = len(pred_vectors) > settings.subset_num
         if use_clustering:
-            # print('\n\tClustering likelihoods...')            
             record_time('start')
+            if use_subset:
+                cluster_subset = pred_vectors.sample(settings.subset_num)
+            else:
+                cluster_subset = pred_vectors
             sense_clusters, cluster_centers = cluster_predictions(
-                predictions, target_alts, settings, min_sense_size,
+                cluster_subset, target_alts, settings, min_sense_size,
                 plot_clusters, print_clusters, f'{output_path}/clusters')
             record_time('end')
         else:
             ## We don't cluster a target that is too small
-            sense_clusters = {0 : list(predictions.index)}
-            cluster_centers = get_cluster_centers(predictions, 1, sense_clusters)   
+            sense_clusters = {0 : list(pred_vectors.index)}
+            cluster_centers = get_cluster_centers(pred_vectors, 1, sense_clusters)   
 
         if sense_clusters == None:
             continue
 
         with open(logging_file, 'a') as flog:
             print('====================================\n', file=flog)
-            print(f'{target.capitalize()} : {len(predictions)} rows', file=flog)
+            print(f'{target.capitalize()} : {len(pred_vectors)} rows', file=flog)
             if len(target_alts) > 1:
                 print(f'Alt form: {target_alts[1]}', file=flog)
             if not use_clustering:
                 ## We don't want to cluster a target that is too small
                 print('\tSkipping WSI; not enough rows\n', file=flog)
+
+            for sense, cluster in sense_clusters.items():
+                print(f'\t{sense} : {len(cluster)}')
+
+            ## Cluster the remaining 
+            if use_subset:
+                other_preds = pred_vectors.drop(index=cluster_subset.index)
+                sense_clusters = map_other_instances(other_preds, cluster_centers, sense_clusters)
 
             print('\n\tCluster results')
             for sense, cluster in sense_clusters.items():
@@ -120,12 +132,13 @@ def make_clusters(
 
         sense_data.append(get_cluster_data(sense_clusters, target_data))
 
-        best_sentences = find_best_sents(target_data, predictions, cluster_centers, sense_clusters)
+        ## Save information
+        best_sentences = find_best_sents(target_data, pred_vectors, cluster_centers, sense_clusters)
         save_results( dataset_desc, target, 
-                      sense_clusters, best_sentences, len(predictions), output_path)
+                      sense_clusters, best_sentences, len(pred_vectors), output_path)
 
         center_path = f'{output_path}/clusters/{target}.csv'
-        centers = pd.DataFrame(cluster_centers, columns=predictions.columns)
+        centers = pd.DataFrame(cluster_centers, columns=pred_vectors.columns)
         centers.to_csv(center_path)
 
     if len(sense_data) > 0:

@@ -14,14 +14,14 @@ CLUSTER_OPTIONS = [
     'single_corpus' # perform WSI for one corpus, designated by 'selected_corpus'
     ]
 
-## Set these
-cluster_option = CLUSTER_OPTIONS[1]
+## Set these args
+cluster_option = CLUSTER_OPTIONS[0]
 generate_new_predictions = True
 dataset_name = 'semeval'
-selected_corpus = None
-embed = False
+selected_corpus = '2000s'
+embed_sents = False # use BERT embeddings for clustering instead of MLM prediciton vectors
 
-## 
+## Get information about corpus and set paths
 def prep_corpus_info(input_path, config, corpus_name):
     dataset_desc, target_file = config['corpora_data'][corpus_name]
     target_path = f"{input_path}/targets/{target_file}"
@@ -47,14 +47,12 @@ def prep_info_together(input_path, config):
         target_path = f"{subset_path}_words.pkl"
         target_paths[corpus] = target_path
 
-    og_targets = set(og_targets)
-
-    return 'together', config['dataset_desc'], target_paths, og_targets
+    return 'together', config['dataset_desc'], target_paths, set(og_targets)
 
 ## Pull data
 data_path = dotenv_values(".env")['data_path']
 input_path = f"{data_path}/corpus_data/{dataset_name}"
-output_path = f"{data_path}/masking_results/{dataset_name}/"
+output_path = f"{data_path}/masking_results/{dataset_name}"
 with open(f"configs/{dataset_name}.json", "r") as read_file:
     config = json.load(read_file)
 
@@ -79,7 +77,7 @@ for corpus_info in corpora_info:
 
     # TODO: get alt targets for US / UK
     # og_targets = [
-    #     'face_nn','head_nn', 'land_nn', 'part_nn', 'record_nn', 'tree_nn', 'word_nn']
+    #     'face_nn','head_nn']
     target_data = filter_target_data(
         target_paths, og_targets, 
         config['min_sense_size'], 
@@ -87,8 +85,8 @@ for corpus_info in corpora_info:
         config['occurence_lim'])
 
     if dataset_name == 'semeval':
+        ## original corpus is POS labeled; need to trim off for BERT
         targets = [[t, t[:-3]] for t in og_targets] 
-        ## need to trim off POS label for BERT, could load these targets
     else:
         targets = target_data.target.unique()
         targets = [[t] for t in targets]
@@ -96,17 +94,16 @@ for corpus_info in corpora_info:
     if generate_new_predictions:
         make_predictions(
             target_data.reset_index(), targets.copy(),
-            dataset_desc, save_path, embed_sents=embed)
+            dataset_desc, save_path, embed_sents=embed_sents)
         print('Predicting done!')
     else:
         print('Skipping prediction step')
 ##%%
-    ## TODO: cluster on subset, then match the rest
     make_clusters(
         target_data, targets, dataset_desc, 
         config['min_sense_size'],
-        save_path, embed_sents=embed, 
-        print_clusters=True)
+        save_path, embed_sents=embed_sents, 
+        print_clusters=True, plot_clusters=True)
     print('Clustering done!')
 ##%%
     del target_data

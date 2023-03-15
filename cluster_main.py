@@ -59,7 +59,7 @@ def make_clusters(
     dataset_desc: str,
     min_sense_size: int,
     output_path: str,
-    embedded_sents=False,
+    embed_sents=False,
     resume_clustering: bool = False,
     plot_clusters: bool = False,
     print_clusters: bool = False
@@ -76,7 +76,7 @@ def make_clusters(
         print(f'\n{n+1} / {len(targets)} : {" ".join(target_alts)}')
 
         ### Get vectors
-        if embedded_sents:
+        if embed_sents:
             with open(f'{output_path}/vectors/{target}.pkl', 'rb') as vp:
                 pred_vectors = pickle.load(vp)
                 pred_vectors = pd.DataFrame.from_dict(pred_vectors).T
@@ -96,6 +96,7 @@ def make_clusters(
                 cluster_subset = pred_vectors.sample(settings.subset_num)
             else:
                 cluster_subset = pred_vectors
+            
             sense_clusters, cluster_centers = cluster_predictions(
                 cluster_subset, target_alts, settings, min_sense_size,
                 plot_clusters, print_clusters, f'{output_path}/clusters')
@@ -117,7 +118,10 @@ def make_clusters(
                 ## We don't want to cluster a target that is too small
                 print('\tSkipping WSI; not enough rows\n', file=flog)
 
+            print('\n\tCluster results')
+            print('\n\tCluster results', file=flog)
             for sense, cluster in sense_clusters.items():
+                print(f'\t{sense} : {len(cluster)}', file=flog)
                 print(f'\t{sense} : {len(cluster)}')
 
             ## Cluster the remaining 
@@ -125,10 +129,11 @@ def make_clusters(
                 other_preds = pred_vectors.drop(index=cluster_subset.index)
                 sense_clusters = map_other_instances(other_preds, cluster_centers, sense_clusters)
 
-            print('\n\tCluster results')
-            for sense, cluster in sense_clusters.items():
-                print(f'\t{sense} : {len(cluster)}', file=flog)
-                print(f'\t{sense} : {len(cluster)}')
+                print('\n\tFinal clusters with all rows')
+                print('\n\tFull clusters', file=flog)
+                for sense, cluster in sense_clusters.items():
+                    print(f'\t{sense} : {len(cluster)}', file=flog)
+                    print(f'\t{sense} : {len(cluster)}')
 
         sense_data.append(get_cluster_data(sense_clusters, target_data))
 
